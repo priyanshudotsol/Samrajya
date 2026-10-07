@@ -1,0 +1,369 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@theme inline {
+  /* Samrajya dark royal theme (docs/KINGDOM_UI.md §2): near-black panels, #C9A227 gold hairlines */
+  --color-background: #0e0b08;
+  --color-background-surface: #080605;
+  --color-background-panel: #120e0a;
+  --color-background-tertiary: #1b150e;
+  --color-background-quaternary: #241c12;
+  --color-background-muted: #2e2416;
+
+  --color-border-default: #3a2e17;
+  --color-border-active: #c9a227;
+  --color-border-secondary: #8c7124;
+  --color-border-muted: #2e2412;
+  --color-border-tertiary: #5a4718;
+
+  --color-text-primary: #f5ebd7;
+  --color-text-secondary: #b8a887;
+  --color-text-inverse: #120d06;
+  --color-text-highlight: #e3c15a;
+
+  --color-button-highlight: #c9a227;
+  --color-button-secondary: #120d06;
+  --color-button-muted: #2a2114;
+
+  --color-slider-track: #241b0e;
+
+  --color-gold: #c9a227;
+  --color-vermilion: #e2483c;
+
+  --font-afacad: var(--font-afacad);
+  --font-clash: var(--font-clash);
+  --font-rozha: var(--font-rozha);
+  --font-yatra: var(--font-yatra);
+  --font-tiro: var(--font-tiro);
+
+  --color-foreground: oklch(0.985 0 0);
+  --color-card: oklch(0.21 0.006 285.885);
+  --color-card-foreground: oklch(0.985 0 0);
+  --color-popover: oklch(0.21 0.006 285.885);
+  --color-popover-foreground: oklch(0.985 0 0);
+  --color-primary: oklch(0.92 0.004 286.32);
+  --color-primary-foreground: oklch(0.21 0.006 285.885);
+  --color-secondary: oklch(0.274 0.006 286.033);
+  --color-secondary-foreground: oklch(0.985 0 0);
+  --color-muted: oklch(0.274 0.006 286.033);
+  --color-muted-foreground: oklch(0.705 0.015 286.067);
+  --color-accent: oklch(0.274 0.006 286.033);
+  --color-accent-foreground: oklch(0.985 0 0);
+  --color-destructive: oklch(0.704 0.191 22.216);
+  --color-border: oklch(1 0 0 / 10%);
+  --color-input: oklch(1 0 0 / 15%);
+  --color-ring: oklch(0.552 0.016 285.938);
+  --color-chart-1: oklch(0.488 0.243 264.376);
+  --color-chart-2: oklch(0.696 0.17 162.48);
+  --color-chart-3: oklch(0.769 0.188 70.08);
+  --color-chart-4: oklch(0.627 0.265 303.9);
+  --color-chart-5: oklch(0.645 0.246 16.439);
+  --color-sidebar: oklch(0.21 0.006 285.885);
+  --color-sidebar-foreground: oklch(0.985 0 0);
+  --color-sidebar-primary: oklch(0.488 0.243 264.376);
+  --color-sidebar-primary-foreground: oklch(0.985 0 0);
+  --color-sidebar-accent: oklch(0.274 0.006 286.033);
+  --color-sidebar-accent-foreground: oklch(0.985 0 0);
+  --color-sidebar-border: oklch(1 0 0 / 10%);
+  --color-sidebar-ring: oklch(0.552 0.016 285.938);
+
+  /* Transaction Card Colors */
+  --color-txn-icon-bg: oklch(0.4685 0.0456 175.3);
+  --color-txn-status-bg: oklch(0.3633 0.0662 170.65);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  --radius: 0.625rem;
+}
+
+::-webkit-scrollbar {
+  width: 1px;
+  height: 1px;
+}
+
+/* Track */
+::-webkit-scrollbar-track {
+  background: none;
+}
+
+/* Handle */
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-active);
+}
+
+/* Handle on hover */
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-border-active);
+}
+
+/* Toggle Group CSS */
+
+.frame {
+  /* defaults — override via inline style or a parent CSS rule */
+  --cut: 10px; /* corner cut size */
+  --bw: 2px; /* border width (ring thickness) */
+  --bc: var(--color-border-active); /* border color */
+  --bg: var(--color-background-default); /* inner background */
+
+  display: inline-flex;
+  background: var(--bc); /* border (outer ring) */
+  padding: var(--bw); /* this defines border thickness */
+  position: relative;
+  box-sizing: border-box;
+}
+
+/* inner container that holds the content (clipped the same way as outer) */
+.frame .frame-inner {
+  position: relative;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  box-sizing: border-box;
+  padding: 2px;
+  /* clip-path is inherited from parent `.clip-*` */
+}
+
+/* ------------------- corner shapes ------------------- */
+
+/* Top-left + Bottom-right diagonal */
+.clip-tlbr,
+.clip-tlbr .frame-inner {
+  clip-path: polygon(
+    var(--cut) 0,
+    100% 0,
+    100% calc(100% - var(--cut)),
+    calc(100% - var(--cut)) 100%,
+    0 100%,
+    0 var(--cut)
+  );
+}
+
+/* Top-right + Bottom-left diagonal */
+.clip-trbl,
+.clip-trbl .frame-inner {
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--cut)) 0,
+    100% var(--cut),
+    100% 100%,
+    var(--cut) 100%,
+    0 calc(100% - var(--cut))
+  );
+}
+
+/* single corners */
+.clip-tl,
+.clip-tl .frame-inner {
+  clip-path: polygon(var(--cut) 0, 100% 0, 100% 100%, 0 100%, 0 var(--cut));
+}
+.clip-tr,
+.clip-tr .frame-inner {
+  clip-path: polygon(0 0, calc(100% - var(--cut)) 0, 100% var(--cut), 100% 100%, 0 100%);
+}
+.clip-br,
+.clip-br .frame-inner {
+  clip-path: polygon(
+    0 0,
+    100% 0,
+    100% calc(100% - var(--cut)),
+    calc(100% - var(--cut)) 100%,
+    0 100%
+  );
+}
+.clip-bl,
+.clip-bl .frame-inner {
+  clip-path: polygon(0 0, 100% 0, 100% 100%, var(--cut) 100%, 0 calc(100% - var(--cut)));
+}
+
+/* optional: subtle inner glow (keeps inside the clipped box) */
+.frame .frame-inner::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 20px rgba(201, 162, 39, 0.05);
+  border-radius: 0;
+  clip-path: inherit; /* ensure glow respects the same cut */
+}
+
+.background-gradient {
+  position: absolute;
+  width: 946px;
+  height: 609px;
+  left: calc(50% - 946px / 2 + 1px);
+  top: -651px;
+
+  background: rgba(201, 162, 39, 0.35);
+  filter: blur(100px);
+}
+
+#sparkler {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  width: 1px;
+  height: 1px;
+  transform: rotate(-25deg);
+  border-radius: 50%;
+  box-shadow: 0 0 250px 100px var(--color-border-active);
+}
+#sparkler:before {
+  content: '';
+  width: 3px;
+  height: 5vh;
+  background: linear-gradient(to right, dimgray, silver);
+  position: absolute;
+  top: 0;
+  left: 0;
+  border-radius: 1rem;
+}
+#sparkler:after {
+  content: '';
+  width: 4px;
+  height: 5vh;
+  background: linear-gradient(to right, dimgray, gray);
+  position: absolute;
+  top: calc(5vh - 1px);
+  left: 3px;
+  /* 	border-radius: 1rem; */
+}
+
+.particle {
+  height: 1px;
+  border-radius: 50%;
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--color-border-active),
+    white,
+    var(--color-border-active),
+    transparent
+  );
+  box-shadow: 0 0 1px var(--color-border-active);
+  position: absolute;
+  transition: 0.5s linear;
+  z-index: 10;
+}
+
+/* Subtle jaali (lattice) pattern for panels */
+.jaali {
+  background-image:
+    radial-gradient(circle at 50% 50%, rgba(201, 162, 39, 0.07) 1.5px, transparent 2px),
+    radial-gradient(circle at 0 0, rgba(201, 162, 39, 0.05) 1px, transparent 1.5px);
+  background-size: 18px 18px, 18px 18px;
+  background-position: 0 0, 9px 9px;
+}
+
+.gold-hairline {
+  border: 1px solid rgba(201, 162, 39, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(201, 162, 39, 0.08), 0 0 24px rgba(0, 0, 0, 0.6);
+}
+
+.text-gold-gradient {
+  background: linear-gradient(180deg, #f6e3a1 0%, #c9a227 55%, #8c6a14 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Solana wallet-adapter modal re-skin */
+.wallet-adapter-modal-wrapper {
+  background: var(--color-background-panel) !important;
+  border: 1px solid var(--color-border-active);
+  border-radius: 0 !important;
+  font-family: var(--font-afacad), sans-serif !important;
+}
+.wallet-adapter-modal-title {
+  font-family: var(--font-rozha), serif !important;
+  color: var(--color-text-highlight) !important;
+}
+.wallet-adapter-modal-list .wallet-adapter-button {
+  font-family: var(--font-afacad), sans-serif !important;
+}
+.wallet-adapter-modal-list .wallet-adapter-button:hover {
+  background: var(--color-background-muted) !important;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-primary;
+  }
+}
+
+@layer utilities {
+  .fade-in {
+    background-color: var(--color-background);
+    animation: fadeInBackground 1.2s ease-out forwards;
+  }
+
+  .fade-in-passport {
+    background-color: var(--color-background-panel);
+    animation: fadeInBackground 1.2s ease-out forwards;
+  }
+
+  /* Gentle animations for specific components */
+  .animate-card-enter {
+    animation: cardEnter 0.8s ease-out forwards;
+  }
+
+  .animate-onboarding-fade {
+    animation: onboardingFade 0.6s ease-out forwards;
+  }
+
+  .animate-title-fade {
+    animation: titleFade 0.7s ease-out forwards;
+    animation-delay: 0.2s;
+    opacity: 0;
+  }
+}
+
+@keyframes cardEnter {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes onboardingFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes titleFade {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeInBackground {
+  from {
+    background-color: black;
+  }
+  to {
+    background-color: var(--color-background);
+  }
+}

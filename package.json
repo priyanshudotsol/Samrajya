@@ -1,0 +1,33 @@
+{
+  "name": "samrajya",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "build": "anchor build",
+    "build:debug": "anchor build --no-idl -- --features debug && cp target/deploy/samrajya.so target/deploy/samrajya_debug.so && anchor build",
+    "test:unit": "cargo test -p samrajya --lib",
+    "test:program": "yarn build:debug && cargo test -p samrajya --test full_game -- --nocapture",
+    "test": "yarn test:unit && yarn test:program",
+    "stack:local": "./scripts/local-stack.sh",
+    "test:er": ". ./scripts/local-env.sh && ts-mocha -p ./tsconfig.json -t 3600000 tests/samrajya-er.ts",
+    "test:er:devnet": "ts-mocha -p ./tsconfig.json -t 3600000 tests/samrajya-er.ts",
+    "create-game": "ts-node scripts/create-game.ts",
+    "keeper": "ts-node scripts/keeper.ts"
+  },
+  "dependencies": {
+    "@coral-xyz/anchor": "0.32.1",
+    "@magicblock-labs/ephemeral-rollups-sdk": "0.14.3",
+    "@solana/web3.js": "^1.98.4"
+  },
+  "devDependencies": {
+    "@types/bn.js": "^5.1.0",
+    "@types/chai": "^5.2.2",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^22.0.0",
+    "chai": "^5.2.0",
+    "mocha": "^11.2.2",
+    "ts-mocha": "^11.1.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
+  }
+}

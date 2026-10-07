@@ -1,0 +1,16 @@
+.anchor
+.DS_Store
+target
+**/*.rs.bk
+node_modules
+test-ledger
+.yarn
+.surfpool
+.env
+.env.local
+.local-stack
+
+# reference-only code (not part of Samrajya)
+magicblock-engine-examples/
+reference/
+app/.removed-evm/
