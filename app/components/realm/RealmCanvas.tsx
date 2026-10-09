@@ -10,7 +10,7 @@ import { localPose } from '@/lib/arena/controller';
 import { attackersOf, wheelFor } from '@/lib/arena/odds';
 import { KINGDOMS } from '@/lib/game/factions';
 import { battleOdds, lamportsToSol, solToLamports } from '@/lib/game/math';
-import type { Game } from '@/lib/game/types';
+import { PLAINS, type Game } from '@/lib/game/types';
 import { deriveRealmVisuals, soldiersFor, type IncomingCamp, type RealmVisuals } from '@/lib/realm/derive';
 import { bearing, generateRealm, spreadAngles } from '@/lib/realm/layout';
 import { useRealmUi } from '@/lib/realm/ui-store';
@@ -31,6 +31,7 @@ import { EnemyCamps, Marches } from './EnemyCamps';
 import { Island } from './Island';
 import { Landmarks } from './Landmarks';
 import { PaintProvider } from './paint';
+import { PlainsScene } from './PlainsScene';
 import { Clouds, RealmLighting } from './RealmLighting';
 import { SatelliteIsland } from './SatelliteIsland';
 import { ShieldDome } from './ShieldDome';
@@ -205,7 +206,7 @@ export default function RealmCanvas({ territory, onNavigate }: { territory: numb
         onIncline={() => setDpr(1.5)}
       >
         <Suspense fallback={null}>
-          <Scene territory={territory} onNavigate={onNavigate} />
+          {territory === PLAINS ? <PlainsScene /> : <Scene territory={territory} onNavigate={onNavigate} />}
           {!lowPower && !degraded && <Effects />}
         </Suspense>
       </PerformanceMonitor>

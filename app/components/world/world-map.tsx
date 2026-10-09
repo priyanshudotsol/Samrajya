@@ -312,7 +312,7 @@ const FLAG_GEO = new THREE.PlaneGeometry(0.9, 0.55, 8, 1).translate(0.45, 0, 0);
  * Neutral at first; its holder's banner flies over a ring of standing stones and the plains pot
  * is paid to that kingdom at every bell.
  */
-function Plains({ hovered, onHover }: { hovered: boolean; onHover: (t: number | null) => void }) {
+function Plains({ hovered, onHover, onSelect }: { hovered: boolean; onHover: (t: number | null) => void; onSelect: (t: number) => void }) {
   const game = useGame((s) => s.game)!;
   const owner = game.territoryOwner[PLAINS];
   const neutral = owner === NEUTRAL;
@@ -365,8 +365,16 @@ function Plains({ hovered, onHover }: { hovered: boolean; onHover: (t: number | 
         onPointerOver={(e) => {
           e.stopPropagation();
           onHover(PLAINS);
+          document.body.style.cursor = 'pointer';
         }}
-        onPointerOut={() => onHover(null)}
+        onPointerOut={() => {
+          onHover(null);
+          document.body.style.cursor = '';
+        }}
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelect(PLAINS);
+        }}
       >
         <group scale={[0.85, 0.35, 0.85]}>
           <mesh geometry={geo.ground} material={groundMat} receiveShadow />
@@ -459,7 +467,7 @@ function Scene() {
       <Clouds />
       <Routes />
       <Attacks />
-      <Plains hovered={hovered === PLAINS} onHover={setHovered} />
+      <Plains hovered={hovered === PLAINS} onHover={setHovered} onSelect={select} />
       {KINGDOMS.map((k) => (
         <WorldIsland key={k.id} territory={k.id} hovered={hovered === k.id} onHover={setHovered} onSelect={select} />
       ))}

@@ -12,7 +12,7 @@ import { RealmHud } from '@/components/realm-hud/RealmHud';
 import { findEntry, useBattle } from '@/lib/arena/battleMachine';
 import { control } from '@/lib/arena/controller';
 import { useBattleDriver } from '@/lib/arena/useBattleDriver';
-import { KINGDOMS } from '@/lib/game/factions';
+import { N_TERRITORIES } from '@/lib/game/types';
 import { useMediaQuery } from '@/lib/hooks/use-media-query';
 import { useRealmUi } from '@/lib/realm/ui-store';
 import { useGame } from '@/lib/store/game';
@@ -32,7 +32,8 @@ export default function KingdomPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const id = Number(params.id);
-  const valid = Number.isInteger(id) && id >= 0 && id < KINGDOMS.length;
+  // the six kingdoms and Kurukshetra, the plains in the middle (6)
+  const valid = Number.isInteger(id) && id >= 0 && id < N_TERRITORIES;
   const game = useGame((s) => s.game);
   const error = useGame((s) => s.error);
   const narrow = useMediaQuery('(max-width: 900px)');
