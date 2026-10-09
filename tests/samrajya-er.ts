@@ -194,7 +194,15 @@ describe("samrajya on the Ephemeral Rollup", () => {
           expect((await unitOf(d)).hp, "the garrison fell").to.eq(0);
           console.log(`  ${KINGDOMS[0]} shot down the garrison of ${TERRITORIES[t]} over the wall`);
         }
+        // nobody of the kingdom is alive here: walk in through the gate and seize it at once (§10.11)
         await walkTo(kp, GATE.x, GATE.z);
+        await walkTo(kp, 0, 60);
+        const u1 = await unitOf(kp);
+        await send(er, await er_.methods.seize(u1.x, u1.z).accountsPartial(act(kp)).remainingAccounts(await musterAccounts(er_, gameId)).transaction(), [kp]);
+        const after = await fetchGame();
+        expect(after.territoryOwner[t], "seized without the bell").to.eq(0);
+        expect(after.epoch, "the epoch did not move").to.eq(g.epoch);
+        console.log(`  ${KINGDOMS[0]} walked into empty ${TERRITORIES[t]} and seized it at once`);
       }
       // the bell, with every member's warrior mustered
       const now = Math.floor(Date.now() / 1000);
