@@ -97,7 +97,7 @@ function useSeize() {
 }
 
 const MUSIC_CREDIT =
-  'Music: "Five Armies", "The Curtain Rises", "Long Road Ahead B" by Kevin MacLeod (incompetech.com), licensed under Creative Commons: By Attribution 4.0 (http://creativecommons.org/licenses/by/4.0/). Trimmed/re-encoded.';
+  'Music: "Five Armies", "Heroic Age", "The Curtain Rises", "Long Road Ahead B" by Kevin MacLeod (incompetech.com), licensed under Creative Commons: By Attribution 4.0 (http://creativecommons.org/licenses/by/4.0/). Trimmed/re-encoded.';
 
 function Toggles() {
   const muted = useSyncExternalStore(subscribeAudio, isMuted, () => true);

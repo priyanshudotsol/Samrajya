@@ -2,7 +2,9 @@
 
 import { useEffect } from 'react';
 
+import { play, playSfx } from '@/lib/audio';
 import { TeamWinData } from '@/lib/hooks/use-team-win-detection';
+import { playSting, stopSting } from '@/lib/music';
 import { TeamWinCelebration } from './team-win-celebration';
 
 interface TeamWinModalProps {
@@ -18,6 +20,18 @@ export function TeamWinModal({ isOpen, onClose, teamWinData, onMarkAsShown }: Te
       onMarkAsShown();
     }
   }, [isOpen, onMarkAsShown]);
+
+  // One kingdom rules the world: war horns, a fanfare, and the victory parade march
+  useEffect(() => {
+    if (!isOpen || !teamWinData) return;
+    playSfx('warhorn', { volume: 0.9 });
+    const fanfare = setTimeout(() => play('fanfare'), 600);
+    playSting('parade');
+    return () => {
+      clearTimeout(fanfare);
+      stopSting('parade');
+    };
+  }, [isOpen, teamWinData]);
 
   if (!isOpen || !teamWinData) {
     return null;

@@ -8,7 +8,8 @@
 import { isMuted, subscribeAudio } from '@/lib/audio';
 
 export type MusicBed = 'peace' | 'battle';
-export type MusicSting = 'victory' | 'defeat';
+/** `parade`: the victory march when one kingdom has conquered the whole world. */
+export type MusicSting = 'victory' | 'defeat' | 'parade';
 type Track = MusicBed | MusicSting;
 
 /** Music sits under the SFX. */
@@ -21,6 +22,8 @@ const SRC: Record<Track, string> = {
   battle: '/audio/music/war.m4a',
   victory: '/audio/music/victory.mp3',
   defeat: '/audio/music/defeat.mp3',
+  // "Heroic Age" (Kevin MacLeod, CC BY 4.0): the world-conquest victory parade
+  parade: '/audio/music/parade.m4a',
 };
 const TRACKS = Object.keys(SRC) as Track[];
 const STEP_MS = 50;
@@ -120,6 +123,13 @@ export function playSting(s: MusicSting) {
   const a = el(s);
   a.currentTime = 0;
   sting = s;
+  apply();
+}
+
+/** Ends the sting now (fades back to the bed), e.g. when the victory screen closes. */
+export function stopSting(s?: MusicSting) {
+  if (!sting || (s && sting !== s)) return;
+  sting = null;
   apply();
 }
 

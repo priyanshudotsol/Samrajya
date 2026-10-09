@@ -12,6 +12,7 @@ all files were re-encoded to a smaller bitrate with metadata stripped; `victory.
 | `peace.mp3` | Dhaka | (no longer used: no melody between fights) | https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1400003 | re-encoded to 128 kbps |
 | `war.m4a` | Five Armies | the war theme, played only while a fight is on | https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100326 | re-encoded to 128 kbps AAC |
 | `battle.mp3` | Mountain Emperor | (no longer used) | https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1700012 | re-encoded to 128 kbps |
+| `parade.m4a` | Heroic Age | the victory parade when one kingdom conquers the world | https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100586 | re-encoded to 128 kbps AAC |
 | `victory.mp3` | The Curtain Rises | HELD / conqueror sting | https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1500011 | first 26 s, 2 s fade-out, 160 kbps |
 | `defeat.mp3` | Long Road Ahead B | FALLEN lament sting | https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100589 | first 24 s, 4 s fade-out, 160 kbps |
 
