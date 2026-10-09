@@ -90,8 +90,9 @@ export function BattleDirector({
     () => camps.map((c) => [Math.cos(c.angle) * (CAMP_RADIUS + 0.35), Math.sin(c.angle) * (CAMP_RADIUS + 0.35)]),
     [camps],
   );
+  // no wheel when the hand fight decided it (§10.8): there was no roll
   const wheel = useMemo(
-    () => (entry ? wheelFor(entry, snapshot, useGame.getState().game?.battleLog ?? []) : null),
+    () => (entry && !entry.byFight && !entry.captured ? wheelFor(entry, snapshot, useGame.getState().game?.battleLog ?? []) : null),
     [entry, snapshot],
   );
   const fireSpots = useMemo<[number, number, number][]>(() => {

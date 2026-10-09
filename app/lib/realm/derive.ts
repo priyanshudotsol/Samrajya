@@ -4,7 +4,7 @@
  */
 import { KINGDOMS, isAdjacent, kingdomGlow } from '@/lib/game/factions';
 import { effectiveAllocs, lamportsToSol } from '@/lib/game/math';
-import type { Game } from '@/lib/game/types';
+import { PLAINS, type Game } from '@/lib/game/types';
 
 import { bearing, spreadAngles } from './layout';
 
@@ -133,7 +133,8 @@ export function deriveRealmVisuals(game: Game, territory: number): RealmVisuals 
   const landmarks: number[] = [];
   for (let i = 0; i < KINGDOMS.length; i++) if ((fac.powers & (1 << i)) !== 0) landmarks.push(i);
 
-  const satT = game.territoryOwner.map((o, t) => (o === owner && t !== territory ? t : -1)).filter((t) => t >= 0);
+  // satellites are the other walled realms held (the plains appear on the world map only)
+  const satT = game.territoryOwner.map((o, t) => (o === owner && t !== territory && t !== PLAINS ? t : -1)).filter((t) => t >= 0);
   const satAngles = spreadAngles(
     satT.map((t) => bearing(territory, t)),
     0.9,

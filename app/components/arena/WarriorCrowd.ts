@@ -7,37 +7,74 @@
 import * as THREE from 'three';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 
-import type { ClipName, WarriorTemplate } from '@/lib/arena/warriors';
+import type { ClipName, PropName, WarriorTemplate } from '@/lib/arena/warriors';
 
-export type WarriorState = 'idle' | 'walk' | 'run' | 'attack' | 'block' | 'hit' | 'cheer' | 'dead';
+export type WarriorState = 'idle' | 'walk' | 'run' | 'attack' | 'block' | 'hit' | 'cheer' | 'dead' | 'dodge' | 'charge';
+
+/** Per-frame extras for `set` (§10.10 moves and hit feel). */
+export interface WarriorExtra {
+  /** The current swing is a charged heavy blow. */
+  heavy?: boolean;
+  /** Position in a light combo (1–3) of the current swing. */
+  combo?: number;
+  /** Hitstop: hold the pose this frame. */
+  frozen?: boolean;
+  /** Direction of a roll relative to the facing. */
+  dodge?: 'F' | 'B' | 'L' | 'R';
+}
 
 const FADE = 0.22;
 const tmpQ = new THREE.Quaternion();
 const tmpQ2 = new THREE.Quaternion();
 const side = new THREE.Vector3();
 
+/** What each gear (lib/game/units GEAR order) carries and how it swings. */
+const GEAR_KIT: { props: PropName[]; attack: ClipName[]; idle: ClipName; scale: number }[] = [
+  { props: ['sword'], attack: ['slash', 'attack'], idle: 'idle', scale: 1 }, // Talwar
+  { props: ['spear'], attack: ['stab'], idle: 'idle2h', scale: 1 }, // Bhala
+  { props: ['crossbow'], attack: ['shoot'], idle: 'idle', scale: 1 }, // Dhanush
+  { props: ['sword', 'bigshield'], attack: ['bash', 'attack'], idle: 'idle', scale: 1 }, // Dhal
+  { props: ['sword', 'ladder'], attack: ['attack', 'slash'], idle: 'idle', scale: 1 }, // Seedhi
+  { props: ['greatsword', 'shield'], attack: ['heavy'], idle: 'idle2h', scale: 1.28 }, // Gaja
+];
+const ALL_PROPS: PropName[] = ['sword', 'greatsword', 'shield', 'bigshield', 'spear', 'crossbow', 'ladder'];
+/** A swing plays its clip in this many seconds, so the blow lands ~0.2 s after the click. */
+const SWING_SECS = 0.55;
+
 interface Warrior {
   root: THREE.Object3D;
+  gear: number;
+  swing: number;
+  propNodes: Partial<Record<PropName, THREE.Object3D>>;
   mixer: THREE.AnimationMixer;
   actions: Partial<Record<ClipName, THREE.AnimationAction>>;
   clip: ClipName | null;
   state: WarriorState;
   stateT: number;
   color: string;
+  extra: WarriorExtra;
+  frozen: boolean;
   rArm: THREE.Object3D | null;
   lArm: THREE.Object3D | null;
   meshes: THREE.Mesh[];
   baseMats: THREE.Material[];
+  team: boolean[];
 }
 
 const tintCache = new Map<string, THREE.Material>();
+/** `amount` ≥ 1 paints the mesh flat in the kingdom colour (capes: a texture tint stays red). */
 function tinted(m: THREE.Material, color: string, amount: number): THREE.Material {
   const key = `${m.uuid}:${color}:${amount}`;
   let t = tintCache.get(key);
   if (!t) {
     t = m.clone();
     const sm = t as THREE.MeshStandardMaterial;
-    if (sm.color) sm.color.lerp(new THREE.Color(color), amount);
+    if (amount >= 1) {
+      sm.map = null;
+      sm.color = new THREE.Color(color);
+      sm.roughness = 0.75;
+      sm.metalness = 0;
+    } else if (sm.color) sm.color.lerp(new THREE.Color(color), amount);
     tintCache.set(key, t);
   }
   return t;
@@ -88,7 +125,7 @@ export class WarriorCrowd {
     for (const [name, clip] of Object.entries(this.template.clips)) {
       if (!clip) continue;
       const a = mixer.clipAction(clip);
-      if (name === 'death' || name === 'impact') {
+      if (['death', 'death2', 'impact', 'impact2', 'blockhit', 'slash', 'slash2', 'attack', 'stab', 'stab1', 'heavy', 'spin', 'shoot', 'bash', 'dodgeF', 'dodgeB', 'dodgeL', 'dodgeR'].includes(name)) {
         a.setLoop(THREE.LoopOnce, 1);
         a.clampWhenFinished = true;
       }
@@ -98,14 +135,25 @@ export class WarriorCrowd {
     root.traverse((o) => {
       if ((o as THREE.Mesh).isMesh) meshes.push(o as THREE.Mesh);
     });
+    const propNodes: Warrior['propNodes'] = {};
+    for (const [k, n] of Object.entries(this.template.props)) {
+      const o = n ? root.getObjectByName(n) : undefined;
+      if (o) propNodes[k as PropName] = o;
+    }
     const w: Warrior = {
       root,
+      gear: -1,
+      swing: -1,
+      propNodes,
+      team: meshes.map((m) => this.template.teamMeshes.some((t) => m.name.startsWith(t) || m.parent?.name === t)),
       mixer,
       actions,
       clip: null,
       state: 'idle',
       stateT: 0,
       color: '',
+      extra: {},
+      frozen: false,
       rArm: findBone(root, /RightArm$/i),
       lArm: findBone(root, /LeftArm$/i),
       meshes,
@@ -125,51 +173,109 @@ export class WarriorCrowd {
   private clipFor(w: Warrior, s: WarriorState, i: number): ClipName | null {
     const a = w.actions;
     const pick = (...names: ClipName[]) => names.find((n) => a[n]) ?? null;
+    const kit = GEAR_KIT[w.gear] ?? GEAR_KIT[0];
     switch (s) {
       case 'walk':
         return pick('walk', 'run', 'idle');
       case 'run':
         return pick('run', 'walk', 'idle');
-      case 'attack':
-        return i % 2 ? pick('slash', 'attack', 'idle') : pick('attack', 'slash', 'idle');
+      case 'attack': {
+        const melee = w.gear !== 2; // not the bow
+        // a charged blow comes down two-handed; a light combo goes slash, backhand, spinning finisher
+        if (melee && w.extra.heavy) return pick('heavy', 'attack', 'slash', 'idle');
+        if (melee && w.gear !== 1 && w.gear !== 3 && w.extra.combo) {
+          const chain: ClipName[] = ['slash', 'slash2', 'spin'];
+          return pick(chain[(w.extra.combo - 1) % 3], 'slash', 'attack', 'idle');
+        }
+        if (w.gear === 1 && w.extra.combo === 2) return pick('stab1', 'stab', 'idle');
+        // alternate the gear's swings blow by blow
+        const want = kit.attack[Math.abs(w.swing + i) % kit.attack.length];
+        return pick(want, 'slash', 'attack', 'idle');
+      }
+      case 'dodge':
+        return pick(w.extra.dodge === 'B' ? 'dodgeB' : w.extra.dodge === 'L' ? 'dodgeL' : w.extra.dodge === 'R' ? 'dodgeR' : 'dodgeF', 'run', 'idle');
+      case 'charge':
+        // the two-handed chop, held at its wind-up (see `end`)
+        return pick('heavy', 'block', 'idle');
       case 'block':
         return pick('block', 'idle');
       case 'hit':
-        return pick('impact', 'idle');
+        return w.state === 'hit' && w.clip === 'blockhit' ? 'blockhit' : pick((w.swing + i) % 2 ? 'impact2' : 'impact', 'impact', 'idle');
       case 'cheer':
         return pick('victory', 'idle');
       case 'dead':
-        return pick('death', 'idle');
+        return pick(i % 2 ? 'death2' : 'death', 'death', 'idle');
       default:
-        return pick('idle');
+        return pick(kit.idle, 'idle');
     }
   }
 
-  /** Places warrior `i` this frame. `tilt` leans it about its local x (used for faked deaths). */
-  set(i: number, x: number, y: number, z: number, face: number, state: WarriorState, color: string, scale = 1, tilt = 0) {
+  private setGear(w: Warrior, gear: number) {
+    w.gear = gear;
+    const kit = GEAR_KIT[gear] ?? GEAR_KIT[0];
+    for (const p of ALL_PROPS) {
+      const n = w.propNodes[p];
+      if (n) n.visible = kit.props.includes(p);
+    }
+  }
+
+  /**
+   * Places warrior `i` this frame. `tilt` leans it about its local x (used for faked deaths).
+   * `gear` picks the props and swings; a new `swing` number restarts the attack clip (one blow
+   * per strike); `blocked` plays the shield-hit reaction instead of the flinch.
+   */
+  set(
+    i: number,
+    x: number,
+    y: number,
+    z: number,
+    face: number,
+    state: WarriorState,
+    color: string,
+    scale = 1,
+    tilt = 0,
+    gear = 0,
+    swing = 0,
+    blocked = false,
+    extra: WarriorExtra = {},
+  ) {
     while (this.pool.length <= i) this.pool.push(this.make());
     this.used = Math.max(this.used, i + 1);
     const w = this.pool[i];
-    w.root.visible = scale > 0.02;
+    if (gear !== w.gear) this.setGear(w, gear);
+    const kit = GEAR_KIT[w.gear] ?? GEAR_KIT[0];
+    const s = scale * (this.template.source === 'knight' ? kit.scale : 1);
+    w.root.visible = s > 0.02;
     w.root.position.set(x, y, z);
-    w.root.scale.setScalar(Math.max(scale, 0.0001));
+    w.root.scale.setScalar(Math.max(s, 0.0001));
     if (color !== w.color) {
       w.color = color;
-      w.meshes.forEach((m, k) => (m.material = tinted(w.baseMats[k], color, this.tintAmount)));
+      w.meshes.forEach((m, k) => (m.material = tinted(w.baseMats[k], color, w.team[k] ? 1 : this.tintAmount)));
     }
-    if (state !== w.state) {
+    w.frozen = !!extra.frozen;
+    w.extra = extra;
+    const newSwing = state === 'attack' && swing !== w.swing;
+    if (state === 'attack') w.swing = swing;
+    if (state !== w.state || newSwing) {
       w.state = state;
       w.stateT = 0;
     }
-    const clip = this.clipFor(w, state, i);
-    if (clip !== w.clip) {
+    let clip = this.clipFor(w, state, i);
+    if (state === 'hit' && blocked && w.actions.blockhit) clip = 'blockhit';
+    if (clip !== w.clip || newSwing) {
       const next = clip ? w.actions[clip] : undefined;
       const prev = w.clip ? w.actions[w.clip] : undefined;
       if (next) {
-        next.reset().setEffectiveWeight(1).fadeIn(FADE).play();
+        next.reset().setEffectiveWeight(1);
+        const once = next.loop === THREE.LoopOnce;
+        // swings are sped up to land fast (a heavy blow a little slower, a roll snappy); flinches stay natural
+        const dur = next.getClip().duration;
+        next.timeScale =
+          state === 'attack' && once ? dur / (extra.heavy ? SWING_SECS * 1.25 : extra.combo === 3 ? SWING_SECS * 1.15 : SWING_SECS) : state === 'dodge' ? dur / 0.42 : state === 'charge' ? 0.55 : 1;
+        next.fadeIn(state === 'attack' ? 0.06 : FADE).play();
         if (clip === 'walk' || clip === 'run') next.time = Math.random() * next.getClip().duration;
       }
-      prev?.fadeOut(FADE);
+      if (prev && prev !== next) prev.fadeOut(state === 'attack' ? 0.06 : FADE);
       w.clip = clip;
     }
     // faked death: fall backwards if there is no death clip
@@ -187,9 +293,17 @@ export class WarriorCrowd {
         continue;
       }
       if (!w.root.visible) continue;
+      // hitstop: the pose holds for a few frames on a landed blow
+      if (w.frozen) continue;
       w.stateT += dt;
       const speed = w.state === 'run' && w.clip === 'walk' ? 1.6 : 1;
       w.mixer.update(dt * speed);
+      // a heavy wind-up holds the weapon raised until the release
+      if (w.state === 'charge' && w.clip === 'heavy') {
+        const a = w.actions.heavy!;
+        const hold = a.getClip().duration * 0.32;
+        if (a.time > hold) a.time = hold;
+      }
       // overlays for clips the asset doesn't have
       const fakeAttack = w.state === 'attack' && w.clip !== 'slash' && w.clip !== 'attack';
       const fakeCheer = w.state === 'cheer' && w.clip !== 'victory';

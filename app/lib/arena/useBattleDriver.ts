@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 
-import { play } from '@/lib/audio';
+import { play, playSfx } from '@/lib/audio';
 import { useGame } from '@/lib/store/game';
 
 import { useBattle, type BattlePhase } from './battleMachine';
@@ -31,19 +31,16 @@ export function useBattleDriver(territory: number) {
       useBattle.subscribe((s) => {
         if (s.phase === last.current) return;
         last.current = s.phase;
-        if (s.phase === 'MUSTER') play('drum');
-        if (s.phase === 'CLASH') play('horn');
+        // the war horn calls the muster; the drums / crowd beds swell in CombatFx
+        if (s.phase === 'MUSTER') playSfx('warhorn', { volume: 0.9 });
+        if (s.phase === 'CLASH') {
+          playSfx('clash', { volume: 0.8 });
+          playSfx('warhorn', { volume: 0.6, delay: 0.3 });
+        }
         if (s.phase === 'HELD') play('fanfare');
         if (s.phase === 'FALLEN') play('bell');
       }),
     [],
   );
 
-  // War drums every 2 s while mustering.
-  useEffect(() => {
-    const id = setInterval(() => {
-      if (useBattle.getState().phase === 'MUSTER') play('drum');
-    }, 2000);
-    return () => clearInterval(id);
-  }, []);
 }

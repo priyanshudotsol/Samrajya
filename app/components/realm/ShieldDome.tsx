@@ -5,6 +5,8 @@ import { useFrame } from '@react-three/fiber';
 import { easing } from 'maath';
 import * as THREE from 'three';
 
+import { cameraState } from '@/lib/arena/cameraState';
+
 import { usePaint } from './paint';
 
 const vert = /* glsl */ `
@@ -59,7 +61,9 @@ export function ShieldDome({ strength, pulse }: { strength: number; pulse: boole
   useFrame((_, dt) => {
     mat.uniforms.uTime.value += dt;
     (mat.uniforms.uColor.value as THREE.Color).copy(paint.current);
-    easing.damp(mat.uniforms.uStrength, 'value', 0.15 + strength * 0.85, 0.8, dt);
+    // fainter while you fight on foot (the chase camera looks down through it)
+    const fight = cameraState.mode === 'follow' ? 0.3 : 1;
+    easing.damp(mat.uniforms.uStrength, 'value', (0.15 + strength * 0.85) * fight, 0.8, dt);
     easing.damp(mat.uniforms.uPulse, 'value', pulse ? 1 : 0, 0.4, dt);
   });
   return (

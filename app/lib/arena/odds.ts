@@ -8,7 +8,7 @@
  */
 import { attackPowerOf, cloneGame, defensePowerOf, effectiveAllocs, resolveBattle } from '@/lib/game/math';
 import type { BattleEntry, Game } from '@/lib/game/types';
-import { N_KINGDOMS } from '@/lib/game/types';
+import { N_KINGDOMS, NEUTRAL } from '@/lib/game/types';
 
 export interface WheelSegment {
   faction: number;
@@ -51,9 +51,11 @@ export function wheelFor(entry: BattleEntry, snapshot: Game | null, log: BattleE
     for (const e of earlier) resolveBattle(g, eff, e.territory, e.roll);
     const t = entry.territory;
     if (g.territoryOwner[t] === entry.defender) {
-      const attacks = attackers.map((f) => attackPowerOf(g.factions[f], eff[f][t]));
-      const committed = eff[entry.defender].reduce((a, b) => a + b, 0n);
-      const defense = defensePowerOf(g.factions[entry.defender], committed, g.baseDefense);
+      const attacks = attackers.map((f) => attackPowerOf(g.factions[f], eff[f][t], g.config));
+      const defense =
+        entry.defender === NEUTRAL
+          ? g.plainsDefense > 0n ? g.plainsDefense : 1n
+          : defensePowerOf(g.factions[entry.defender], eff[entry.defender].reduce((a, b) => a + b, 0n), g.baseDefense, g.config);
       const sum = attacks.reduce((a, b) => a + b, 0n);
       if (defense === entry.defense && defense + sum === entry.total) {
         buckets = attacks;

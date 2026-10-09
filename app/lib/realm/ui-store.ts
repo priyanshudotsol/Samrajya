@@ -18,6 +18,9 @@ export interface RealmUi {
   lowPower: boolean;
   /** Set by PerformanceMonitor on weak GPUs: disables post-processing. */
   degraded: boolean;
+  /** Side panels hidden (H) so the battlefield fills the screen. */
+  hudHidden: boolean;
+  setHudHidden: (v: boolean) => void;
   setFocus: (f: RealmFocus | null) => void;
   setHovered: (id: string | null) => void;
   setLowPower: (v: boolean) => void;
@@ -45,6 +48,8 @@ export const useRealmUi = create<RealmUi>((set) => ({
   lowPower: false,
   hydrate: () => set({ lowPower: initialLowPower() }),
   degraded: false,
+  hudHidden: false,
+  setHudHidden: (hudHidden) => set({ hudHidden }),
   setFocus: (focus) => set({ focus }),
   setHovered: (hovered) => set({ hovered }),
   setLowPower: (lowPower) => {

@@ -1,14 +1,16 @@
 'use client';
 
 import { useMemo, useRef } from 'react';
-import { Billboard, Html } from '@react-three/drei';
+import { Billboard } from '@react-three/drei';
+
+import { Html } from '@/components/three/Html';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 
 import { play } from '@/lib/audio';
 import { ROLL_MS } from '@/lib/arena/battleMachine';
 import type { Wheel } from '@/lib/arena/odds';
-import { KINGDOMS, kingdomGlow } from '@/lib/game/factions';
+import { KINGDOMS, kingdomGlow, kingdomInk } from '@/lib/game/factions';
 
 const R_IN = 0.62;
 const R_OUT = 0.95;
@@ -103,9 +105,9 @@ export function RuneWheel({ wheel, position, spinning }: { wheel: Wheel; positio
           <meshBasicMaterial color="#c9a227" toneMapped={false} />
         </mesh>
         <Html position={[0, -R_OUT - 0.3, 0]} center zIndexRange={[30, 0]} style={{ pointerEvents: 'none' }}>
-          <div className="flex gap-2 whitespace-nowrap bg-black/75 px-2 py-1 text-[11px] tabular-nums border border-border-active">
+          <div className="flex gap-2 whitespace-nowrap bg-background-panel/90 shadow-md px-2 py-1 text-[11px] tabular-nums border border-border-active">
             {wheel.segments.map((s) => (
-              <span key={`${s.faction}-${s.defender}`} style={{ color: s.defender ? '#e3c15a' : kingdomGlow(s.faction) }}>
+              <span key={`${s.faction}-${s.defender}`} style={{ color: s.defender ? 'var(--color-text-highlight)' : kingdomInk(s.faction) }}>
                 {s.defender ? 'Defend' : KINGDOMS[s.faction].short} {((s.to - s.from) * 100).toFixed(1)}%
               </span>
             ))}

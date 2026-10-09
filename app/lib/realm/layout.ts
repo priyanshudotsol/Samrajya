@@ -368,13 +368,22 @@ export function groundY(layout: RealmLayout, x: number, z: number): number {
   return 0.2;
 }
 
+/** Placement of the central plains: the middle of the six homelands. */
+const PLAINS_POS = {
+  lat: KINGDOMS.reduce((a, k) => a + k.lat, 0) / KINGDOMS.length,
+  lng: (Math.atan2(
+    KINGDOMS.reduce((a, k) => a + Math.sin((k.lng * Math.PI) / 180), 0),
+    KINGDOMS.reduce((a, k) => a + Math.cos((k.lng * Math.PI) / 180), 0),
+  ) * 180) / Math.PI,
+};
+
 /**
  * Direction (radians in the XZ plane, atan2(z, x)) from territory `from` to territory `to`,
  * from their globe placement: east = +x, north = −z.
  */
 export function bearing(from: number, to: number): number {
-  const a = KINGDOMS[from];
-  const b = KINGDOMS[to];
+  const a = KINGDOMS[from] ?? PLAINS_POS;
+  const b = KINGDOMS[to] ?? PLAINS_POS;
   let dLng = b.lng - a.lng;
   if (dLng > 180) dLng -= 360;
   if (dLng < -180) dLng += 360;

@@ -1,9 +1,11 @@
 'use client';
 
 import { useEffect, useMemo, useRef } from 'react';
-import { Html } from '@react-three/drei';
+import { Html } from '@/components/three/Html';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
+
+import { useGame } from '@/lib/store/game';
 
 import { KINGDOMS } from '@/lib/game/factions';
 import { BIOMES } from '@/lib/realm/layout';
@@ -29,6 +31,7 @@ export function SatelliteIsland({
   onNavigate?: (t: number) => void;
 }) {
   const biome = BIOMES[territory];
+  const owner = useGame((s) => s.game?.territoryOwner[territory] ?? territory);
   const group = useRef<THREE.Group>(null);
   const cx = Math.cos(angle) * SAT_DIST;
   const cz = Math.sin(angle) * SAT_DIST;
@@ -79,7 +82,7 @@ export function SatelliteIsland({
             <mesh geometry={geo.cliff} material={cliffMat} castShadow />
             <RimRocks spec={spec} mat={cliffMat} count={22} />
             <group position={[0, 0.3, 0]} scale={0.85}>
-              <KeepModel territory={territory} />
+              <KeepModel territory={owner} />
             </group>
           </group>
         </Interactable>

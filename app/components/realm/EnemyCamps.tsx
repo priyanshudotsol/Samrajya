@@ -1,12 +1,12 @@
 'use client';
 
 import { useMemo } from 'react';
-import { Html } from '@react-three/drei';
+import { Html } from '@/components/three/Html';
 import { useFrame } from '@react-three/fiber';
 
 import { assault, camp, march, occupy, rout, type Target } from '@/lib/arena/formations';
 import type { BattlePhase } from '@/lib/arena/battleMachine';
-import { KINGDOMS, kingdomGlow } from '@/lib/game/factions';
+import { KINGDOMS, kingdomGlow, kingdomInk, territoryName } from '@/lib/game/factions';
 import type { IncomingCamp, OutgoingMarch } from '@/lib/realm/derive';
 import { CAMP_RADIUS, WALL_RADIUS } from '@/lib/realm/layout';
 import { useRealmUi } from '@/lib/realm/ui-store';
@@ -31,6 +31,7 @@ function Camp({
   phase,
   winner,
   lowPower,
+  troops: showTroops,
 }: {
   c: IncomingCamp;
   slot: number;
@@ -38,6 +39,7 @@ function Camp({
   phase: BattlePhase;
   winner: number | null;
   lowPower: boolean;
+  troops: boolean;
 }) {
   const paint = usePaint();
   const mats = factionMaterials(kingdomGlow(c.faction), paint.time);
@@ -93,15 +95,15 @@ function Camp({
       {phase === 'IDLE' || phase === 'MUSTER' ? (
         <Html position={[cx, 1.75, cz]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none' }}>
           <div
-            className="whitespace-nowrap border px-1.5 py-0.5 text-[11px] bg-black/70 tabular-nums"
-            style={{ borderColor: kingdomGlow(c.faction), color: kingdomGlow(c.faction) }}
+            className="whitespace-nowrap border px-1.5 py-0.5 text-[11px] bg-background-panel/90 shadow-md tabular-nums"
+            style={{ borderColor: kingdomInk(c.faction), color: kingdomInk(c.faction) }}
           >
             {KINGDOMS[c.faction].short} {c.troops} ⚔ · {c.sol.toFixed(2)}
           </div>
         </Html>
       ) : null}
       {/* in battle the Melee owns the soldiers */}
-      {phase === 'IDLE' && <Troops targets={targets} material={mats.tabard} />}
+      {phase === 'IDLE' && showTroops && <Troops targets={targets} material={mats.tabard} />}
     </group>
   );
 }
@@ -112,16 +114,19 @@ export function EnemyCamps({
   phase,
   winner,
   lowPower,
+  troops = true,
 }: {
   camps: IncomingCamp[];
   phase: BattlePhase;
   winner: number | null;
   lowPower: boolean;
+  /** False when the tactical layer draws the real warriors instead of camp crowds. */
+  troops?: boolean;
 }) {
   return (
     <group>
       {camps.map((c, i) => (
-        <Camp key={c.faction} c={c} slot={i} slots={camps.length} phase={phase} winner={winner} lowPower={lowPower} />
+        <Camp key={c.faction} c={c} slot={i} slots={camps.length} phase={phase} winner={winner} lowPower={lowPower} troops={troops} />
       ))}
     </group>
   );
@@ -177,8 +182,8 @@ function March({
       <Troops targets={targets} material={tabard} smooth={0.12} maxSpeed={4} />
       <Banner position={[head.x * 1.04, 0.25, head.z * 1.04]} pole={0.7} size={0.28} material={mats.cloth} />
       <Html position={[head.x * 1.06, 1.15, head.z * 1.06]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none' }}>
-        <div className="whitespace-nowrap bg-black/70 px-1.5 py-0.5 text-[11px] text-text-primary border border-border-tertiary">
-          → {KINGDOMS[m.target].name} · {m.troops} ⚔ · {m.sol.toFixed(2)}
+        <div className="whitespace-nowrap bg-background-panel/90 shadow-md px-1.5 py-0.5 text-[11px] text-text-primary border border-border-tertiary">
+          → {territoryName(m.target)} · {m.troops} ⚔ · {m.sol.toFixed(2)}
         </div>
       </Html>
     </group>

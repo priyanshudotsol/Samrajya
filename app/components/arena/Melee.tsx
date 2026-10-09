@@ -1,14 +1,16 @@
 'use client';
 
 import { useLayoutEffect, useMemo, useRef } from 'react';
-import { Html } from '@react-three/drei';
+import { Html } from '@/components/three/Html';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 
 import { play } from '@/lib/audio';
 import { useBattle, type BattlePhase } from '@/lib/arena/battleMachine';
+import { cameraState } from '@/lib/arena/cameraState';
 import { camp, courtyard, GATE_Z } from '@/lib/arena/formations';
-import { KINGDOMS, kingdomGlow } from '@/lib/game/factions';
+import { KINGDOMS, kingdomGlow, kingdomInk } from '@/lib/game/factions';
+import { ROLE } from '@/lib/game/units';
 import type { IncomingCamp } from '@/lib/realm/derive';
 import { angleDist, GATE_ANGLE, groundY, WALL_RADIUS, type RealmLayout } from '@/lib/realm/layout';
 
@@ -38,6 +40,8 @@ interface Fighter {
   faction: number;
   def: boolean;
   slot: number;
+  /** ROLE.* (vanguard rushes the gate, flank keeps to the sides, rear hangs back and shoots). */
+  role: number;
   pos: THREE.Vector3;
   face: number;
   alive: boolean;
@@ -60,6 +64,17 @@ export interface MeleeSides {
   camps: IncomingCamp[];
 }
 
+/** A real warrior entering the battle where it stood (docs/KINGDOM_UI.md §11.3). */
+export interface CastMember {
+  faction: number;
+  x: number;
+  z: number;
+  face: number;
+  role: number;
+}
+
+const REAR_RANGE = 3.0;
+
 const polar = (r: number, a: number) => [Math.cos(a) * r, Math.sin(a) * r] as const;
 
 /** Splits the 60-instance budget across sides, keeping ≥1 per side that has anyone. */
@@ -77,6 +92,7 @@ export function Melee({
   sides,
   pDefend,
   startPhase,
+  cast,
 }: {
   layout: RealmLayout;
   sides: MeleeSides;
@@ -84,6 +100,8 @@ export function Melee({
   pDefend: number;
   /** Phase when this battle mounted: MUSTER → attackers start at their camps. */
   startPhase: BattlePhase;
+  /** Real warriors (tactical layer): the fight starts from their positions instead of formations. */
+  cast?: CastMember[];
 }) {
   const body = useRef<THREE.InstancedMesh>(null);
   const gear = useRef<THREE.InstancedMesh>(null);
@@ -94,12 +112,25 @@ export function Melee({
   const sim = useMemo(() => {
     const { d, a } = budget(sides.defenders, sides.camps);
     const fighters: Fighter[] = [];
+    if (cast && cast.length) {
+      // the tactical layer: everyone fights from where they stood at the bell
+      for (const m of cast.slice(0, MAX)) {
+        const def = m.faction === sides.defender;
+        const slot = Math.max(0, sides.camps.findIndex((c) => c.faction === m.faction));
+        const f = mk(m.faction, def, slot, m.x, m.z, m.face);
+        f.role = m.role;
+        // defenders already outside the walls don't need to file through the gate
+        if (def && Math.hypot(m.x, m.z) > WALL_RADIUS + 0.1) f.gateStage = 1;
+        fighters.push(f);
+      }
+    } else {
     const yard = courtyard(d);
     for (let i = 0; i < d; i++) {
       const t = yard[i];
       fighters.push(mk(sides.defender, true, 0, t.x, t.z, 0));
     }
-    sides.camps.forEach((c, slot) => {
+    }
+    if (!cast || !cast.length) sides.camps.forEach((c, slot) => {
       const fromCamp = startPhase === 'MUSTER';
       const spots = camp(a[slot], c.angle);
       for (let i = 0; i < a[slot]; i++) {
@@ -261,6 +292,7 @@ export function Melee({
       let armA = ARM_REST;
       let tilt = 0;
       let bob = 0;
+      let armShoot = false;
       if (!f.alive) {
         f.dead += d;
         const k = Math.min(1, f.dead / 0.45);
@@ -283,6 +315,15 @@ export function Melee({
           tx = ((k % 8) - 3.5) * 0.3;
           tz = DEF_LINE + Math.floor(k / 8) * 0.28;
           faceTo = 0;
+        } else if (f.role === ROLE.FLANK) {
+          const side = f.pos.x < 0 ? -1 : 1;
+          tx = side * (2.0 + (i % 3) * 0.3);
+          tz = 0.7 + Math.floor((i % 9) / 3) * 0.35;
+          faceTo = Math.atan2(-tx, -tz);
+        } else if (f.role === ROLE.REAR) {
+          tx = ((i % 7) - 3) * 0.32;
+          tz = ATT_LINE + 1.3 + Math.floor((i % 14) / 7) * 0.3;
+          faceTo = Math.PI;
         } else {
           const perRow = 5;
           const at = sidesRef.current.camps.findIndex((c) => c.faction === f.faction);
@@ -296,10 +337,22 @@ export function Melee({
         const dx = o.pos.x - f.pos.x;
         const dz = o.pos.z - f.pos.z;
         const dist = Math.hypot(dx, dz) || 1;
+        if (f.role === ROLE.REAR && !result && dist < REAR_RANGE + 0.5) {
+          // archers hold their ground and loose arrows; they only close once the result is in
+          faceTo = Math.atan2(dx, dz);
+          if (dist > REAR_RANGE) {
+            tx = o.pos.x - (dx / dist) * REAR_RANGE;
+            tz = o.pos.z - (dz / dist) * REAR_RANGE;
+          }
+          f.swingT += d * 0.9;
+          duel = dist < DUEL_DIST + 0.12;
+          if (!duel) armShoot = true;
+        } else {
         tx = o.pos.x - (dx / dist) * DUEL_DIST;
         tz = o.pos.z - (dz / dist) * DUEL_DIST;
         faceTo = Math.atan2(dx, dz);
         duel = dist < DUEL_DIST + 0.12;
+        }
       } else if (result && wins(f)) {
         cheer = true;
         if (phase === 'FALLEN' && !f.def) {
@@ -396,10 +449,11 @@ export function Melee({
         armA = ARM_REST + Math.sin(now * 12 + i) * 0.3;
         bob = Math.abs(Math.sin(now * 12 + i)) * 0.03;
       }
+      if (armShoot) armA = ARM_RAISED + Math.sin(f.swingT * 6) * 0.3;
       if (duel) tilt = 0.1;
       if (crowd) {
         const ws: WarriorState =
-          f.strike > 0
+          f.strike > 0 || armShoot
             ? 'attack'
             : duel
               ? Math.floor(f.swingT) % 3 === 2
@@ -419,6 +473,42 @@ export function Melee({
     }
     if (crowd) crowd.end(d);
     else commitSoldiers(meshes, F.length);
+
+    // --- where the fighting is (for the camera director) --------------------------------------
+    {
+      let n = 0;
+      let sx = 0;
+      let sy = 0;
+      let sz = 0;
+      for (const f of F) {
+        if (!f.alive) continue;
+        const engaged = f.opp >= 0 && F[f.opp].alive && f.pos.distanceTo(F[f.opp].pos) < DUEL_DIST + 0.4;
+        if (fighting && !engaged && !result) continue;
+        n++;
+        sx += f.pos.x;
+        sy += f.pos.y;
+        sz += f.pos.z;
+      }
+      if (n === 0) {
+        for (const f of F) {
+          if (!f.alive) continue;
+          n++;
+          sx += f.pos.x;
+          sy += f.pos.y;
+          sz += f.pos.z;
+        }
+      }
+      const fight = cameraState.fight;
+      fight.active = n > 0;
+      if (n > 0) {
+        fight.cx = sx / n;
+        fight.cy = sy / n;
+        fight.cz = sz / n;
+        let r = 0;
+        for (const f of F) if (f.alive) r = Math.max(r, Math.hypot(f.pos.x - fight.cx, f.pos.z - fight.cz));
+        fight.radius = r;
+      }
+    }
 
     // --- sparks ------------------------------------------------------------------------------
     const sp = sparks.current;
@@ -444,7 +534,7 @@ export function Melee({
       const byFaction = new Map<number, number>();
       F.forEach((f) => f.alive && byFaction.set(f.faction, (byFaction.get(f.faction) ?? 0) + 1));
       const parts = [sides.defender, ...new Set(F.filter((f) => !f.def).map((f) => f.faction))].map(
-        (fa) => `<span style="color:${kingdomGlow(fa)}">${KINGDOMS[fa].short} ${byFaction.get(fa) ?? 0}</span>`,
+        (fa) => `<span style="color:${kingdomInk(fa)}">${KINGDOMS[fa].short} ${byFaction.get(fa) ?? 0}</span>`,
       );
       label.current.innerHTML = `⚔ ${parts.join(' · ')}`;
     }
@@ -463,7 +553,7 @@ export function Melee({
       )}
       <instancedMesh ref={sparks} args={[SPARK_GEO, SPARK_MAT, SPARKS]} frustumCulled={false} />
       <Html position={[0, 1.5, FIELD_Z + 0.6]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none' }}>
-        <div ref={label} className="whitespace-nowrap bg-black/70 px-2 py-0.5 text-[12px] tabular-nums border border-border-tertiary" />
+        <div ref={label} className="whitespace-nowrap bg-background-panel/90 shadow-md px-2 py-0.5 text-[12px] tabular-nums border border-border-tertiary" />
       </Html>
     </group>
   );
@@ -479,6 +569,7 @@ function mk(faction: number, def: boolean, slot: number, x: number, z: number, f
     faction,
     def,
     slot,
+    role: def ? ROLE.GARRISON : ROLE.VANGUARD,
     pos: new THREE.Vector3(x, def ? 0.36 : 0.2, z),
     face,
     alive: true,
