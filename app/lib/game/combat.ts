@@ -8,6 +8,7 @@
  * Pure rules, no rendering. The mock applies them in `ixStrike`; the program will run the same
  * checks in `strike` (Step 17). The client mirrors them only for feedback (range rings, cooldowns).
  */
+import { PLAINS } from './types';
 import { ACTION, GATE_HALF, GEAR, hexDepth, isInside, isMarching, WALL_APOTHEM, WALL_THICK, type Gear, type Unit } from './units';
 
 export interface WeaponInfo {
@@ -149,7 +150,9 @@ export function resolveStrike(attacker: Unit, facing: number, units: Unit[], own
   const w = weaponOf(attacker.gear);
   const result: StrikeResult = { hits: [], gateDamage: 0, arrowEnd: null };
   const defendingHome = attacker.faction === owner;
-  const bonus = w.ranged && defendingHome && (isInside(attacker.x, attacker.z) || Math.abs(hexDepth(attacker.x, attacker.z)) <= WALL_THICK) ? WALL_ARCHER_BONUS : 1;
+  // Kurukshetra is an open field: no walls to block, shelter behind or shoot from
+  const open = attacker.at === PLAINS;
+  const bonus = !open && w.ranged && defendingHome && (isInside(attacker.x, attacker.z) || Math.abs(hexDepth(attacker.x, attacker.z)) <= WALL_THICK) ? WALL_ARCHER_BONUS : 1;
   const fx = Math.sin(facing);
   const fz = Math.cos(facing);
 
@@ -169,7 +172,7 @@ export function resolveStrike(attacker: Unit, facing: number, units: Unit[], own
     } else {
       if (d > w.range) continue;
       if (d > 0.12 && Math.abs(angleDiff(Math.atan2(dx, dz), facing)) > w.arc) continue;
-      if (crossesWall(attacker.x, attacker.z, u.x, u.z)) continue;
+      if (!open && crossesWall(attacker.x, attacker.z, u.x, u.z)) continue;
       candidates.push({ u, d });
     }
   }
@@ -179,7 +182,7 @@ export function resolveStrike(attacker: Unit, facing: number, units: Unit[], own
     const isBlocked = !opts.heavy && blocking(u, attacker);
     let dmg = w.damage * bonus * (opts.heavy ? HEAVY_MULT : 1);
     if (isBlocked) dmg *= weaponOf(u.gear).blockTaken;
-    if (u.faction === owner && isInside(u.x, u.z)) dmg *= INSIDE_DEFENCE;
+    if (!open && u.faction === owner && isInside(u.x, u.z)) dmg *= INSIDE_DEFENCE;
     const damage = Math.max(1, Math.round(dmg));
     const knock = isBlocked ? KNOCK_LIGHT * 0.5 : opts.heavy ? KNOCK_HEAVY : opts.finisher ? KNOCK_FINISHER : KNOCK_LIGHT;
     result.hits.push({ wallet: u.wallet, damage, blocked: isBlocked, killed: u.hp - damage <= 0, knock });
@@ -208,7 +211,7 @@ export function nearestEnemy(u: Unit, units: Unit[], radius: number, now: number
   for (const o of units) {
     if (o.faction === u.faction || o.at !== u.at || !canFight(o, now)) continue;
     const d = Math.hypot(o.x - u.x, o.z - u.z);
-    if (d < bestD && !crossesWall(u.x, u.z, o.x, o.z)) {
+    if (d < bestD && (u.at === PLAINS || !crossesWall(u.x, u.z, o.x, o.z))) {
       bestD = d;
       best = o;
     }

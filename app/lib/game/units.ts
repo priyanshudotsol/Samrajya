@@ -11,7 +11,7 @@
 import { ADJACENCY, POWER } from './factions';
 import { bearing, CAMP_RADIUS, WALL_RADIUS } from '@/lib/realm/layout';
 
-import { N_KINGDOMS, type Game } from './types';
+import { N_KINGDOMS, N_TERRITORIES, PLAINS, type Game } from './types';
 
 // ---------------------------------------------------------------------------------------------
 // Enums (u8 on-chain)
@@ -177,13 +177,30 @@ export interface MoveRules {
   canClimb: boolean;
   /** The gate lets this unit through. Members of the owner always; enemies only when the fort is open. */
   gateOpen: boolean;
+  /** No walls at all (Kurukshetra, the open plains). */
+  open?: boolean;
 }
+
+/** Kurukshetra's stone circle at the middle of the plains: whoever stands in it claims the plains. */
+export const PLAINS_CIRCLE = 1.5;
+export const inCircle = (x: number, z: number) => Math.hypot(x, z) <= PLAINS_CIRCLE;
 
 /**
  * Resolves one step from (x, z) towards (x + dx, z + dz) against the island edge and the wall.
  * Returns the new position and whether the step was a climb (over the wall).
  */
 export function stepUnit(x: number, z: number, dx: number, dz: number, rules: MoveRules): { x: number; z: number; climbing: boolean } {
+  if (rules.open) {
+    // the open plains: only the island's edge stops you
+    let ox = x + dx;
+    let oz = z + dz;
+    const or = Math.hypot(ox, oz);
+    if (or > EDGE_RADIUS) {
+      ox *= EDGE_RADIUS / or;
+      oz *= EDGE_RADIUS / or;
+    }
+    return { x: ox, z: oz, climbing: false };
+  }
   let nx = x + dx;
   let nz = z + dz;
   // island edge
@@ -280,13 +297,13 @@ export function departurePoint(from: number, to: number): { x: number; z: number
 }
 
 /**
- * Realms a unit at `at` may march to: neighbours of `at`, plus anything with Vidya Reach. Only
- * the six walled homelands are realms; the open plains are fought over with allocations alone.
+ * Realms a unit at `at` may march to: neighbours of `at`, plus anything with Vidya Reach. The six
+ * walled homelands and Kurukshetra, the open plains in the middle (it borders every homeland).
  */
 export function marchTargets(game: Game, faction: number, at: number): number[] {
   const reach = (game.factions[faction].powers & POWER.VIDYA_REACH) !== 0;
   const out: number[] = [];
-  for (let t = 0; t < N_KINGDOMS; t++) {
+  for (let t = 0; t < N_TERRITORIES; t++) {
     if (t === at) continue;
     if (reach || (ADJACENCY[at] & (1 << t)) !== 0) out.push(t);
   }
@@ -406,8 +423,8 @@ export const GATE_INSIDE: Pt = { x: 0, z: WALL_APOTHEM - 0.55 };
  * outside them, through the gate between the two (or straight over the wall with a ladder).
  * `gateOpen: false` stops the route at the gate (`blocked: true`).
  */
-export function planRoute(from: Pt, to: Pt, opts: { canClimb: boolean; gateOpen: boolean }): { route: Pt[]; blocked: boolean } {
-  if (opts.canClimb) return { route: [to], blocked: false };
+export function planRoute(from: Pt, to: Pt, opts: { canClimb: boolean; gateOpen: boolean; open?: boolean }): { route: Pt[]; blocked: boolean } {
+  if (opts.canClimb || opts.open) return { route: [to], blocked: false };
   const fromIn = hexDepth(from.x, from.z) < 0;
   const toIn = hexDepth(to.x, to.z) < 0;
   if (fromIn && toIn) return { route: [to], blocked: false };

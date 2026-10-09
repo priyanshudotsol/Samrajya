@@ -261,13 +261,10 @@ export function battleOdds(game: Game, t: number, extra?: { faction: number; amo
     if (tactics.capturedBy !== null && attacks[tactics.capturedBy] > 0n) {
       defense = 0n;
       attacks = attacks.map((a, i) => (i === tactics.capturedBy ? (a > 0n ? a : 1n) : 0n));
-    } else if (t !== PLAINS) {
-      // the hand fight decides a walled realm (§10.8): until the fort is cleared, it holds
+    } else {
+      // the hand fight decides every realm, the plains too (§10.8, §10.11): until cleared, it holds
       attacks = attacks.map(() => 0n);
       if (defense === 0n) defense = 1n;
-    } else {
-      defense = bps(defense, tactics.defenseBps);
-      attacks = attacks.map((a, i) => bps(a, tactics.attackBps[i]));
     }
   }
   const total = defense + attacks.reduce((a, b) => a + b, 0n);
@@ -314,7 +311,7 @@ export function resolveBattle(game: Game, eff: bigint[][], t: number, rnd: bigin
     for (let f = 0; f < N_KINGDOMS; f++) if (f !== tactics!.capturedBy) attack[f] = 0n;
   }
   // Walled realms are decided by the hand fight alone (§10.8): cleared → captured, else held.
-  const byFight = !!tactics && t !== PLAINS;
+  const byFight = !!tactics;
   const total = defense + attack.reduce((a, b) => a + b, 0n);
   const roll = captured || byFight ? 0n : rnd % total;
 
@@ -434,7 +431,7 @@ export function advanceEpoch(game: Game, now: number) {
  * the war if `faction` now holds everything. The epoch does not move. Null if it can't be seized.
  */
 export function seizeFort(game: Game, t: number, faction: number): BattleEntry | null {
-  if (game.phase !== 'Active' || game.pendingVrf || t >= N_KINGDOMS || game.territoryOwner[t] === faction) return null;
+  if (game.phase !== 'Active' || game.pendingVrf || t >= N_TERRITORIES || game.territoryOwner[t] === faction) return null;
   if (game.factions[faction].attackAlloc[t] <= 0n) return null;
   const verdict = { territory: t, defender: game.territoryOwner[t], defenseBps: 10_000n, attackBps: game.factions.map(() => 10_000n), capturedBy: faction, garrison: 0, present: game.factions.map(() => 0), heads: { defendersInside: 0, defendersOutside: 0, attackers: game.factions.map(() => 0) } };
   const e = resolveBattle(game, effectiveAllocs(game), t, 0n, verdict);

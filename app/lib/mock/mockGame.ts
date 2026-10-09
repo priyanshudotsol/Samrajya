@@ -49,12 +49,13 @@ import {
   weaponOf,
   type CombatEvent,
 } from '@/lib/game/combat';
-import { DEFEND, type Game, type GameConfig, N_KINGDOMS, PLAINS, type Player, UPGRADE } from '@/lib/game/types';
+import { DEFEND, type Game, type GameConfig, N_KINGDOMS, N_TERRITORIES, PLAINS, type Player, UPGRADE } from '@/lib/game/types';
 import {
   ACTION,
   arrivalPoint,
   GEAR,
   gearAllowed,
+  inCircle,
   isInside,
   isMarching,
   marchTargets,
@@ -205,7 +206,7 @@ function teleportForOrder(s: MockState, p: Player) {
   if (!u || u.hp <= 0) return;
   const g = s.game;
   const target = p.allocEpoch === g.epoch ? p.allocTarget : DEFEND;
-  const to = target !== DEFEND && target < N_KINGDOMS ? target : g.territoryOwner[u.at] === u.faction ? u.at : homeRealm(g, u.faction);
+  const to = target !== DEFEND && target < N_TERRITORIES ? target : g.territoryOwner[u.at] === u.faction ? u.at : homeRealm(g, u.faction);
   if (to === null || to === u.at) return;
   Object.assign(u, teleportUnit(u, g, to, s.now));
   s.goals.delete(u.wallet);
@@ -306,7 +307,7 @@ export function ixSwitch(s: MockState, p: Player, to: number): bigint {
  */
 export function gateOpenFor(game: Game, units: Unit[], u: Unit, t: number, now: number, _gates?: number[]): boolean {
   void _gates;
-  if (game.territoryOwner[t] === u.faction) return true;
+  if (t === PLAINS || game.territoryOwner[t] === u.faction) return true;
   return !fortHeld(game, units, t, now);
 }
 
@@ -318,6 +319,8 @@ export function fortHeld(game: Game, units: Unit[], t: number, now: number): boo
 
 /** Movement rules for `u` in realm `t`: a ladder only climbs walls the gate would also let it through. */
 export function moveRulesFor(game: Game, units: Unit[], u: Unit, t: number, now: number) {
+  // Kurukshetra has no walls at all
+  if (t === PLAINS) return { gateOpen: true, canClimb: false, open: true };
   const gateOpen = gateOpenFor(game, units, u, t, now);
   return { gateOpen, canClimb: u.gear === GEAR.SEEDHI && gateOpen };
 }
@@ -414,8 +417,8 @@ function applyStrike(s: MockState, u: Unit, facing: number, cooldownScale = 1, o
     s.gates[u.at] = Math.max(0, s.gates[u.at] - r.gateDamage);
     pushEvent(s, { ...base, kind: s.gates[u.at] <= 0 ? 'gate-broken' : 'gate', damage: r.gateDamage, x: GATE_POINT.x, z: GATE_POINT.z });
     if (s.gates[u.at] <= 0) {
-      postChat(s, u.faction, '', `The gate of ${KINGDOMS[u.at].name} is broken — pour in!`, true);
-      postChat(s, owner, '', `Our gate at ${KINGDOMS[u.at].name} has fallen — hold the courtyard!`, true);
+      postChat(s, u.faction, '', `The gate of ${territoryName(u.at)} is broken — pour in!`, true);
+      postChat(s, owner, '', `Our gate at ${territoryName(u.at)} has fallen — hold the courtyard!`, true);
     }
   }
   return r;
@@ -484,11 +487,13 @@ function respawnFallen(s: MockState) {
  */
 function seizeAbandoned(s: MockState, rand: Rand) {
   const g = s.game;
-  for (let t = 0; t < N_KINGDOMS; t++) {
+  for (let t = 0; t < N_TERRITORIES; t++) {
     if (fortHeld(g, s.units, t, s.now)) continue;
     const owner = g.territoryOwner[t];
+    // inside the walls of a fort, or in the stone circle of Kurukshetra
+    const claims = (u: Unit) => (t === PLAINS ? inCircle(u.x, u.z) : isInside(u.x, u.z));
     const taker = s.units.find((u) => {
-      if (u.at !== t || u.faction === owner || u.hp <= 0 || isMarching(u, s.now) || !isInside(u.x, u.z)) return false;
+      if (u.at !== t || u.faction === owner || u.hp <= 0 || isMarching(u, s.now) || !claims(u)) return false;
       const p = s.players.find((x) => x.wallet === u.wallet);
       return !!p && p.status === 'Active' && p.allocEpoch === g.epoch && p.allocTarget === t;
     });
@@ -500,7 +505,7 @@ function seizeAbandoned(s: MockState, rand: Rand) {
       p.allocAmount = 0n;
     }
     afterBattles(s, [e], rand);
-    postChat(s, taker.faction, '', `${KINGDOMS[t].name} stood empty — we walked in and took it.`, true);
+    postChat(s, taker.faction, '', `${territoryName(t)} stood empty — we walked in and took it.`, true);
   }
 }
 
@@ -690,8 +695,7 @@ function botAct(s: MockState, rand: Rand, me: string | null) {
 function botGoal(s: MockState, p: Player, u: Unit, rand: Rand): { x: number; z: number } | 'march' | null {
   const g = s.game;
   const owner = g.territoryOwner[u.at];
-  // the plains are taken with allocations alone: a bot attacking them keeps guard at home
-  const attacking = p.allocEpoch === g.epoch && p.allocTarget !== DEFEND && p.allocTarget !== PLAINS ? p.allocTarget : null;
+  const attacking = p.allocEpoch === g.epoch && p.allocTarget !== DEFEND ? p.allocTarget : null;
   if (attacking !== null) {
     if (u.at !== attacking) {
       // walk to the gate road, then march if the target is a neighbour of here
@@ -699,6 +703,8 @@ function botGoal(s: MockState, p: Player, u: Unit, rand: Rand): { x: number; z: 
       // otherwise go home first (the march AI below handles it)
       return null;
     }
+    // Kurukshetra: crowd into the stone circle
+    if (attacking === PLAINS) return { x: (rand() - 0.5) * 1.6, z: (rand() - 0.5) * 1.6 };
     // at the target: take up the role's position outside the enemy walls
     const gateZ = WALL_APOTHEM;
     switch (u.role) {
@@ -883,7 +889,7 @@ function afterBattles(s: MockState, entries: ReturnType<typeof resolveEpoch>, ra
       }
       s.goals.delete(u.wallet);
     }
-    if (e.captured) postChat(s, e.winner, '', `${KINGDOMS[e.territory].name} was abandoned — we walked in without a fight.`, true);
+    if (e.captured) postChat(s, e.winner, '', `${territoryName(e.territory)} was abandoned — we walked in without a fight.`, true);
     if (e.eliminated) {
       s.units = s.units.filter((u) => u.faction !== e.defender);
     }
@@ -900,7 +906,7 @@ function afterBattles(s: MockState, entries: ReturnType<typeof resolveEpoch>, ra
       const by = KINGDOMS[enemies[0].faction].name;
       s.chatAt[owner] = s.now;
       const voice = s.units.find((u) => u.faction === owner);
-      if (voice) postChat(s, owner, voice.wallet, `${by} is at the gate of ${KINGDOMS[t].name} — everyone inside the walls!`);
+      if (voice) postChat(s, owner, voice.wallet, `${by} is at the gate of ${territoryName(t)} — everyone inside the walls!`);
     }
   }
 }

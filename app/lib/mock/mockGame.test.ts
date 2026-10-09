@@ -47,7 +47,8 @@ for (const seed of [1, 2, 3, 42]) {
 
 /**
  * One human in Magadh against empty kingdoms: each epoch they commit to a neighbour and walk into
- * its empty courtyard (taken outright), or assault the plains, until they hold everything.
+ * its empty courtyard, or into Kurukshetra's stone circle (each taken at once), until they hold
+ * everything.
  */
 function conquerAlone(rand: () => number) {
   const s = createMockState(0, { rand, epochSecs: 20, initialBotsPerKingdom: 0, maxBots: 0, restartSecs: 10_000 });
@@ -60,7 +61,8 @@ function conquerAlone(rand: () => number) {
       const t = targets.find((x) => x !== PLAINS) ?? targets[0];
       if (t !== undefined) {
         ixAllocate(s, me, t, me.shares * 1_000_000n);
-        if (t !== PLAINS) Object.assign(unitOf(s, 'raja')!, { x: 0, z: 0.9 }); // through the gate
+        // through the gate into the courtyard, or into Kurukshetra's stone circle
+        Object.assign(unitOf(s, 'raja')!, t !== PLAINS ? { x: 0, z: 0.9 } : { x: 0, z: 0.3 });
       }
     }
     stepMock(s, (now += 0.5), rand, 'raja');

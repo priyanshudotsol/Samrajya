@@ -7,7 +7,7 @@
 import { MAX_EVENTS, RESPAWN_HP, weaponOf } from '@/lib/game/combat';
 import { publishStrike, publishUnit } from '@/lib/multiplayer/field';
 import { ACTION, arrivalPoint, GEAR, gearAllowed, marchTargets, newUnit, teleportUnit, type Gear, type Role, type Unit, type UnitAction } from '@/lib/game/units';
-import { DEFEND, N_KINGDOMS } from '@/lib/game/types';
+import { DEFEND, N_TERRITORIES } from '@/lib/game/types';
 import { useGame } from '@/lib/store/game';
 
 type UnitActions = Pick<import('./types').GameActions, 'moveUnit' | 'setRole' | 'setGear' | 'march' | 'strike' | 'rally'>;
@@ -93,7 +93,7 @@ export function teleportForOrder(wallet: string, target: number) {
   if (!g) return;
   upsert(wallet, (u) => {
     if (u.hp <= 0) return u;
-    const to = target !== DEFEND && target < N_KINGDOMS ? target : g.territoryOwner[u.at] === u.faction ? u.at : homeOf(u.faction);
+    const to = target !== DEFEND && target < N_TERRITORIES ? target : g.territoryOwner[u.at] === u.faction ? u.at : homeOf(u.faction);
     return to === u.at ? u : teleportUnit(u, g, to, Date.now() / 1000);
   });
 }

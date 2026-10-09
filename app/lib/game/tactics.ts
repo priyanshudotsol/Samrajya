@@ -12,7 +12,7 @@
  * ones are dead. On-chain the same numbers come from `Game.presence[t][f]` (weights ×100),
  * maintained incrementally by `move_unit`, so the callback never iterates players.
  */
-import { GEAR, isInside, isPresent, ROLE, type Unit, zoneOf } from './units';
+import { GEAR, inCircle, isInside, isPresent, ROLE, type Unit, zoneOf } from './units';
 import { PLAINS, type Game } from './types';
 
 export interface TacticalFactors {
@@ -73,8 +73,30 @@ function factor(floor: bigint, span: bigint, weight: number, members: number): b
 
 export function tacticalFactors(game: Game, units: Unit[], t: number, now: number): TacticalFactors {
   const defender = game.territoryOwner[t];
-  // The plains have no walls and no warriors: the allocations alone decide.
-  if (t === PLAINS) return NEUTRAL_FACTORS(game, t);
+  // Kurukshetra (§10.11): its holder keeps it while one of its members stands alive on the plains;
+  // otherwise the attackers standing in the stone circle take it (the most warriors there).
+  if (t === PLAINS) {
+    const f = NEUTRAL_FACTORS(game, t);
+    const inRing = game.factions.map(() => 0);
+    for (const u of units) {
+      if (u.at !== t || !isPresent(u, now)) continue;
+      if (u.faction === defender) f.heads.defendersInside += 1;
+      else if (game.factions[u.faction].alive && game.factions[u.faction].attackAlloc[t] > 0n) {
+        f.heads.attackers[u.faction] += 1;
+        if (inCircle(u.x, u.z)) inRing[u.faction] += 1;
+      }
+    }
+    if (f.heads.defendersInside === 0) {
+      let best = 0;
+      inRing.forEach((n, i) => {
+        if (n > best) {
+          best = n;
+          f.capturedBy = i;
+        }
+      });
+    }
+    return f;
+  }
   const n = game.factions.length;
   const present = Array.from({ length: n }, () => 0);
   const attackers = Array.from({ length: n }, () => 0);
