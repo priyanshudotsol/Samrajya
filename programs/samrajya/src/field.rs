@@ -402,6 +402,33 @@ pub fn decide_forts(game: &mut Game, players: &[Player]) {
     game.fight_set = true;
 }
 
+/// `seize` (§10.11): `seizer` stands inside realm `t`'s walls with an order on it, and among
+/// `players` (which must hold every member of the owner, checked) none stands alive in `t`.
+pub fn check_abandoned(game: &Game, t: usize, seizer: &Player, players: &[Player], keys: &[Pubkey]) -> Result<()> {
+    require!(t < N, SamrajyaError::InvalidTerritory);
+    let owner = game.territory_owner[t];
+    require!(fighting(seizer, game) && seizer.unit.at as usize == t, SamrajyaError::InvalidUnit);
+    require!(is_inside(seizer.unit.x as i32, seizer.unit.z as i32), SamrajyaError::InvalidUnit);
+    require!(seizer.alloc_epoch == game.epoch && seizer.alloc_target as usize == t, SamrajyaError::InvalidUnit);
+    for i in 0..keys.len() {
+        for j in i + 1..keys.len() {
+            require_keys_neq!(keys[i], keys[j], SamrajyaError::IncompleteMuster);
+        }
+    }
+    if (owner as usize) < N {
+        let o = owner as usize;
+        let mut members = 0u32;
+        for p in players {
+            if p.faction == owner && p.shares > 0 && p.generation == game.factions[o].generation {
+                members += 1;
+                require!(!(fighting(p, game) && p.unit.at as usize == t), SamrajyaError::FortHeld);
+            }
+        }
+        require!(members == game.factions[o].members, SamrajyaError::IncompleteMuster);
+    }
+    Ok(())
+}
+
 /// Every enlisted member of a standing kingdom must be passed to the bell, so nobody can hide a
 /// garrison: per kingdom, the members passed must equal `Faction.members`.
 pub fn check_complete(game: &Game, players: &[Player], keys: &[Pubkey]) -> Result<()> {
@@ -618,6 +645,41 @@ mod tests {
         near.unit.z = 0;
         let mut targets = [near];
         assert!(strike(&mut a, &mut targets, &mut g, 0, -100, false, 50).is_err());
+    }
+
+    #[test]
+    fn walking_into_an_abandoned_fort_takes_it_at_once() {
+        let mut g = game();
+        let mut a = member(&mut g, 1);
+        let mut d = member(&mut g, 0);
+        math::allocate(&mut g, &mut a, 0, 50_000_000).unwrap();
+        a.unit.x = 0;
+        a.unit.z = 50; // in the courtyard
+        let keys = [Pubkey::new_unique(), Pubkey::new_unique()];
+        // the defender lives: refused
+        assert!(check_abandoned(&g, 0, &a, &[a.clone(), d.clone()], &keys).is_err());
+        // the garrison hidden from the muster: refused
+        d.unit.hp = 0;
+        assert!(check_abandoned(&g, 0, &a, &[a.clone()], &keys[..1]).is_err());
+        // standing outside the walls: refused
+        let mut out = a.clone();
+        out.unit.z = 340;
+        assert!(check_abandoned(&g, 0, &out, &[out.clone(), d.clone()], &keys).is_err());
+        // dead garrison, mustered, attacker inside: Hastinapur falls now, no bell
+        check_abandoned(&g, 0, &a, &[a.clone(), d.clone()], &keys).unwrap();
+        let e = math::seize(&mut g, 0, 1).unwrap();
+        assert!(e.by_fight && e.winner == 1 && e.eliminated);
+        assert_eq!(g.territory_owner[0], 1);
+        assert_eq!(g.factions[1].attack_alloc[0], 0);
+        assert_eq!(g.epoch, 1); // the epoch did not move
+        // a kingdom with no members at all: nobody to muster
+        let mut g2 = game();
+        let mut a2 = member(&mut g2, 1);
+        math::allocate(&mut g2, &mut a2, 2, 50_000_000).unwrap();
+        a2.unit.x = 0;
+        a2.unit.z = 0;
+        check_abandoned(&g2, 2, &a2, &[a2.clone()], &keys[..1]).unwrap();
+        assert_eq!(math::seize(&mut g2, 2, 1).unwrap().winner, 1);
     }
 
     #[test]

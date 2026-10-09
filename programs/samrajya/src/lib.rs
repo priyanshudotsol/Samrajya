@@ -284,6 +284,34 @@ pub mod samrajya {
         Ok(())
     }
 
+    /// Walks into an abandoned fort (§10.11): your warrior steps to (x, z) inside realm `at`'s walls
+    /// with an order on it, and no member of its owner stands alive there. Remaining accounts:
+    /// every Player with shares (the owner's are checked complete). The realm falls at once.
+    #[session_auth_or(ctx.accounts.player.wallet == ctx.accounts.signer.key(), SessionError::InvalidToken)]
+    pub fn seize(ctx: Context<PlayerAction>, x: i16, z: i16) -> Result<()> {
+        let now = Clock::get()?.unix_timestamp;
+        let game_key = ctx.accounts.game.key();
+        {
+            let p = &mut ctx.accounts.player;
+            let (at, a, fx, fz, g, r) = (p.unit.at, p.unit.action, p.unit.fx, p.unit.fz, p.unit.gear, p.unit.role);
+            field::move_unit(p, &ctx.accounts.game, at, x, z, fx, fz, a, g, r, now)?;
+        }
+        let mut players = Vec::with_capacity(ctx.remaining_accounts.len());
+        let mut keys = Vec::with_capacity(ctx.remaining_accounts.len());
+        for info in ctx.remaining_accounts.iter() {
+            let p = read_player(info)?;
+            require_keys_eq!(p.game, game_key, SamrajyaError::Unauthorized);
+            keys.push(info.key());
+            players.push(p);
+        }
+        let t = ctx.accounts.player.unit.at as usize;
+        field::check_abandoned(&ctx.accounts.game, t, &ctx.accounts.player, &players, &keys)?;
+        let faction = ctx.accounts.player.faction;
+        let e = math::seize(&mut ctx.accounts.game, t, faction)?;
+        msg!("seized {} from {}", t, e.defender);
+        Ok(())
+    }
+
     /// Commits the Player back to base (after `leave`, or after the game ends to `claim`).
     #[session_auth_or(ctx.accounts.player.wallet == ctx.accounts.signer.key(), SessionError::InvalidToken)]
     pub fn undelegate_player(ctx: Context<UndelegatePlayer>) -> Result<()> {

@@ -64,4 +64,6 @@ pub enum SamrajyaError {
     NotReady,
     #[msg("Every member's warrior must be mustered for the bell")]
     IncompleteMuster,
+    #[msg("A defender still holds that fort")]
+    FortHeld,
 }

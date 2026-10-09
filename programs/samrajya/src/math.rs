@@ -497,6 +497,28 @@ pub fn advance_epoch(game: &mut Game, now: i64) {
     }
 }
 
+/// An abandoned fort taken at once (§10.11): `faction` walked into realm `t` while no member of
+/// its owner stood alive there. Resolved like a bell battle for that realm only (loot, losses,
+/// elimination, conquest), its attacks are spent, and the war ends if `faction` now holds all.
+pub fn seize(game: &mut Game, t: usize, faction: u8) -> Result<BattleEntry> {
+    require!(game.phase == Phase::Active && !game.pending_vrf, SamrajyaError::WrongPhase);
+    require!(t < N && game.territory_owner[t] != faction, SamrajyaError::InvalidTerritory);
+    require!(game.factions[faction as usize].attack_alloc[t] > 0, SamrajyaError::NotAdjacent);
+    let eff = effective_allocs(game);
+    let entry = resolve_battle(game, &eff, t, 0, Some(faction)).ok_or(SamrajyaError::InvalidTerritory)?;
+    require!(entry.winner == faction, SamrajyaError::InvalidTerritory);
+    for f in 0..N {
+        game.factions[f].attack_alloc[t] = 0;
+    }
+    push_log(game, entry);
+    let first = game.territory_owner[0];
+    if first != NEUTRAL && game.territory_owner.iter().all(|&o| o == first) {
+        game.phase = Phase::Ended;
+        game.winner = first;
+    }
+    Ok(entry)
+}
+
 /// Whether the lobby may be closed by anyone: the timer ran out and two kingdoms have members.
 pub fn lobby_ready(game: &Game, now: i64) -> bool {
     game.phase == Phase::Lobby && now >= game.epoch_ends_at && game.factions.iter().filter(|f| f.members > 0).count() >= 2
