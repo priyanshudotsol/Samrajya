@@ -7,7 +7,7 @@ import * as THREE from 'three';
 
 import { useGame } from '@/lib/store/game';
 
-import { KINGDOMS } from '@/lib/game/factions';
+import { territoryName } from '@/lib/game/factions';
 import { BIOMES } from '@/lib/realm/layout';
 import { buildTerrain, miniTerrainSpec } from '@/lib/realm/terrain';
 
@@ -72,7 +72,7 @@ export function SatelliteIsland({
       <group ref={group} position={[cx, -0.3, cz]}>
         <Interactable
           id={`sat-${territory}`}
-          label={KINGDOMS[territory].name}
+          label={territoryName(territory)}
           hint="Conquered territory · visit"
           labelY={2}
           onSelect={() => onNavigate?.(territory)}
@@ -88,7 +88,7 @@ export function SatelliteIsland({
         </Interactable>
         <Html position={[0, 1.4, 0]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none' }}>
           <div className="whitespace-nowrap font-rozha text-xs text-text-highlight drop-shadow">
-            {KINGDOMS[territory].name}
+            {territoryName(territory)}
           </div>
         </Html>
       </group>

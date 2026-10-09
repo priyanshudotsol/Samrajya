@@ -5,9 +5,9 @@ import { Footprints, Keyboard, Swords } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { useTactical } from '@/lib/arena/useTactics';
-import { KINGDOMS, kingdomInk, territoryName } from '@/lib/game/factions';
-import { PLAINS } from '@/lib/game/types';
-import { GEARS, gearAllowed, isMarching, MARCH_SECS, marchProgress, marchTargets, ROLES, zoneOf, ZONE_LABEL, type Gear, type Role } from '@/lib/game/units';
+import { KINGDOMS, kingdomInk, ownerName, territoryName } from '@/lib/game/factions';
+import { NEUTRAL, PLAINS } from '@/lib/game/types';
+import { GEARS, gearAllowed, inCircle, isMarching, MARCH_SECS, marchProgress, marchTargets, ROLES, zoneOf, ZONE_LABEL, type Gear, type Role } from '@/lib/game/units';
 import { useFieldStatus } from '@/lib/multiplayer/useFieldSync';
 import { isMockMode, useGame } from '@/lib/store/game';
 
@@ -71,7 +71,7 @@ export function SainikPanel({ territory }: { territory: number }) {
         <span className="text-text-secondary">
           {marching ? (
             <>
-              Marching to <span style={{ color: kingdomInk(game.territoryOwner[u.marchTo!]) }}>{KINGDOMS[u.marchTo!].name}</span> ·{' '}
+              Marching to <span style={{ color: kingdomInk(game.territoryOwner[u.marchTo!]) }}>{territoryName(u.marchTo!)}</span> ·{' '}
               {Math.max(0, Math.ceil((1 - marchProgress(u, now)) * MARCH_SECS))} s
             </>
           ) : here ? (
@@ -80,7 +80,7 @@ export function SainikPanel({ territory }: { territory: number }) {
             </>
           ) : (
             <>
-              In <span style={{ color: kingdomInk(game.territoryOwner[u.at]) }}>{KINGDOMS[u.at].name}</span>, {ZONE_LABEL[zone]}
+              In <span style={{ color: kingdomInk(game.territoryOwner[u.at]) }}>{territoryName(u.at)}</span>, {u.at === PLAINS ? (inCircle(u.x, u.z) ? 'in the stone circle' : 'on the open plains') : ZONE_LABEL[zone]}
             </>
           )}
         </span>
@@ -145,7 +145,7 @@ export function SainikPanel({ territory }: { territory: number }) {
               disabled={locked}
               clipCorners="top-left-bottom-right"
               onClick={() => void run('march', [t], game.territoryOwner[t] === u.faction ? `Teleported to ${territoryName(t)}` : t === PLAINS ? `Teleported to ${territoryName(t)}` : `Teleported to the gate of ${territoryName(t)}`)}
-              title={game.territoryOwner[t] === u.faction ? 'Your kingdom holds this realm' : `Held by ${KINGDOMS[game.territoryOwner[t]].name}`}
+              title={game.territoryOwner[t] === u.faction ? 'Your kingdom holds this realm' : game.territoryOwner[t] === NEUTRAL ? 'Nobody holds it yet' : `Held by ${ownerName(game.territoryOwner[t])}`}
             >
               → <span style={{ color: kingdomInk(game.territoryOwner[t]) }}>{territoryName(t)}</span>
             </Button>
