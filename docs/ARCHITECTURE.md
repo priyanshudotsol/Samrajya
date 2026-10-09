@@ -516,7 +516,14 @@ plan in chat; nothing should play itself. So the fight before the bell is real:
   battle (loot, losses, elimination, conquest bonus), zeroes its attack allocations, and ends the war if
   one kingdom now holds everything; the epoch does not move. A kingdom with no members needs no muster.
   The HUD sends it the moment your warrior is inside such a fort; the mock does it on its tick.
-- **Music:** the battle loop plays only while blows are struck in the realm on screen (swings, hits,
+- **Kurukshetra is fought by hand too (user, 2026-10-09):** attacking it teleports the squad to the
+  plains (`/kingdom/6`, `PlainsScene`: the island with no fort, a ring of standing stones, the holder's
+  banner). No walls there (`MoveRules.open`, no wall checks in strikes). The holder keeps it while one
+  of its members stands alive on the plains; then attackers in the stone circle (radius 1.5) take it at
+  once (`seize`) or at the bell (most warriors in the circle). The VRF is no longer used anywhere.
+- **Music:** "Five Armies" (Kevin MacLeod, CC BY 4.0) is the war theme, opened by a war horn; no
+  melody between fights (the user disliked the calm loop).
+- **Music (earlier):** the battle loop plays only while blows are struck in the realm on screen (swings, hits,
   arrows, kills) and returns to the peace loop 6 s after the last one; the bell's verdict keeps its sting.
 
 ### 10.10 The fort lock and real fights (user, 2026-10-09)

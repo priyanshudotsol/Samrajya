@@ -155,6 +155,13 @@ Update this file at the end of every session. Design lives in `docs/ARCHITECTURE
 - [x] Deployed to devnet (no layout change). `test:er:devnet` 7/7 (war 9): Magadh and Kalinga seized the moment Hastinapur walked in after shooting their garrisons down, Avanti / Takshashila / Vijayanagar (no members) seized on entry, all before the bell; winners claimed the vault to rent
 - [x] **War 10 open on devnet** (`32MUFgrpm426n8tHBtWPvBfPii4v5LAKQjBwX2bG5Uns`, lobby on Solana); keeper running
 
+## Phase 12 — Kurukshetra by hand, a real war theme (2026-10-09)
+- [x] User: the music was "some melody I don't like"; attacking the centre kingdom did nothing (no teleport, nothing to see)
+- [x] Music: "Five Armies" as the war theme (public/audio/music/war.m4a, 128 kbps AAC) with a war horn at the first blow; no peace melody; credits updated
+- [x] Kurukshetra: realm page `/kingdom/6` with `PlainsScene` (stone circle, dais, holder's banner), clickable on the world map, `PlainsPanel` + plains HUD; teleport on attack (program, mock, local); no walls on the plains; holder keeps it while one member lives there, else attackers in the circle take it at once (`seize`) or at the bell; VRF removed from the bell
+- [x] Program deployed (no layout change; war 10 kept running); 22 Rust + 42 TS tests pass
+- [ ] User to check in the UI
+
 ## Phase 4 — Ship
 - [x] Devnet game 1 created: `6vHY4pcSVGQwbqFiuJMioLMgd6icLNQNRYRGHTt7BHzS`, 30 s epochs, delegated, **lobby open**
 - [ ] Start the war (`GAME_ID=1 yarn create-game --start`) and keep `GAME_ID=1 yarn keeper` running

@@ -1403,9 +1403,10 @@
       "name": "resolve_epoch",
       "docs": [
         "Permissionless game clock (the bell). Remaining accounts: every enlisted member's Player",
-        "(checked complete), so the program can read the hand fight at each fort: no living defender",
-        "inside and an attacker at the gate takes it, otherwise it holds (§10.8). Only an attack on",
-        "the open plains still needs the VRF; then the battles resolve in `battle_callback`."
+        "(checked complete), so the program can read the hand fight in every realm: no living member",
+        "of the holder there and committed attackers at the gate / inside (in the stone circle on",
+        "Kurukshetra) take it, otherwise it holds (§10.8, §10.11). Every battle is decided by the",
+        "fight, so the bell resolves at once; the VRF accounts stay for compatibility, unused."
       ],
       "discriminator": [
         127,
