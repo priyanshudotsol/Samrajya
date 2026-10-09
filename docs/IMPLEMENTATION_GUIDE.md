@@ -579,3 +579,50 @@ For a solo builder: alternate half-days, program in the morning and UI in the af
 - [ ] A session key can't redirect funds; withdraw and claim always pay `player.wallet`.
 - [ ] The UI handles a refresh in the middle of a battle: the battle machine re-derives its state from `Game`.
 - [ ] The TS `math.ts` matches the Rust `math.rs` on shared test vectors.
+
+---
+
+## Step 16 — Tactical layer in mock mode (done 2026-10-08)
+Rules in `app/lib/game/units.ts` + `tactics.ts` (tests in `tactics.test.ts`), mock in `lib/mock/mockGame.ts`
+(bots walk, march, pick roles/gear, chat), renderer `components/arena/Units.tsx`, controller
+`lib/arena/controller.ts`, camera `components/realm/CameraRig.tsx`, HUD `SainikPanel` / `WarCouncil` /
+`KingdomChat`. Mock mode no longer needs Phantom: a persisted fake wallet identifies the viewer.
+
+## Step 17 — Move the warriors on-chain (core done 2026-10-09, see ARCHITECTURE §10.9; open: on-chain wall collision, presence-weighted tactics, wounds at the bell)
+1. `state.rs`: add `UnitState` to `Player` (ARCHITECTURE §10.1) and `presence: [[u16; 6]; 6]` to `Game`
+   (weights ×100 per territory per faction, plus `inside: [u8; 6]` defender head counts for the walk-in
+   rule). Re-run the LiteSVM space checks (Game is boxed; it grows by ~80 bytes).
+2. `math.rs`: port `unit_weight`, `hex_depth`, `in_gate`, `step_unit` and the §10.3 factors with the
+   same integer rounding as the TS (`Math.round` → `(x + 50) / 100`). Add the `tactics.test.ts` vectors
+   as Rust tests.
+3. Instructions `move_unit`, `set_role`, `set_gear`, `march` (`#[session_auth_or]`), each: settle a
+   finished march, subtract the old weight from `presence`, validate, add the new weight.
+   `battle_callback`: read `presence` for each contested territory, apply the factors / capture, then
+   apply wounds and routs by resetting that territory's presence (the next `move_unit` re-adds it).
+4. `enlist` spawns the unit; `leave` / elimination clear it; `switch` recolours it.
+5. Client: decode `Player.unit` (`lib/solana/decode.ts`), subscribe to all Player PDAs of the game via
+   `getProgramAccounts` + `onProgramAccountChange` on the ER (filter by the game pubkey offset), feed
+   `useGame.units`; replace `lib/actions/local-units.ts` with real ER txs through the session key.
+6. ER cost check: 10 Hz × N players of `move_unit` is the load test — measure with `scripts/er-latency.ts`
+   and drop to 5 Hz if needed.
+7. Combat (ARCHITECTURE §10.7, TS rules in `app/lib/game/combat.ts`, tests in `combat.test.ts`):
+   `UnitState` gains `dead_until: i64` and `ready_at: i64`; `Game` gains `gates: [u16; 6]`.
+   `strike(x, z, facing)` = `move_unit` + cooldown check + `resolve_strike` over the Player accounts
+   passed as `remaining_accounts` (the client sends the warriors within reach, the program re-checks
+   realm / distance / arc / wall line) + gate damage; a kill sets `dead_until`, zeroes the warrior's
+   presence weight and emits an event. `respawn` (or the next `move_unit` after `dead_until`) puts it
+   back at home. `battle_callback` repairs every gate. Port the combat tests as Rust tests.
+8. Client: replace `strike` / `rally` in `local-units.ts` with the ER tx and a chat message; combat
+   events come from program logs (`onLogs`) instead of the mock's event list.
+9. Squad assaults (ARCHITECTURE §10.8): `allocate` on a walled realm teleports the unit to the camp
+   outside its gate (port `campPoint`), Defend brings it home, `march` is instant; `battle_callback`
+   teleports beaten attackers and routed defenders home. Mirror `teleportUnit` from `app/lib/game/units.ts`.
+10. Fight-only resolution (§10.8): in `battle_callback`, a walled realm is captured iff `inside[t] == 0`
+   and a committed attacker is at the gate (the strongest presence wins), else held: no VRF sub-roll for
+   it, `roll = 0`, set `by_fight`. Only the plains use the VRF. `strike` kills set
+   `dead_until = max(epoch_ends_at, now + RESPAWN_SECS)`; nobody respawns while `pending_vrf`. Port
+   `resolveBattle`'s `byFight` branch and the two tests in `combat.test.ts` / `mockGame.test.ts`.
+
+## Step 18 — Kingdom chat on devnet
+Create a Supabase project, run `app/supabase/chat.sql`, set the three env vars (ARCHITECTURE §10.5),
+test with two wallets in two kingdoms: each sees only its own room, a non-member's token is refused.

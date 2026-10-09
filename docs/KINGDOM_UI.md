@@ -416,3 +416,83 @@ app/
 **MVP cut**, if time runs short:
 - Keep: steps 1–5, a simplified step 6 (instanced crowd only, no heroes; rune wheel plus colour takeover), and arcs from step 7.
 - Stretch: animated heroes, satellite islands, fire shader, music.
+
+---
+
+## 11. The tactical layer in the realm (2026-10-08)
+
+### 11.1 Warriors on the island
+`components/arena/Units.tsx` draws every warrior standing in the viewed realm (marchers appear in
+the realm they are walking through, first half leaving the origin, second half arriving at the
+destination's edge), plus the fallen lying where they dropped until they respawn. Bodies are the
+rigged crowd (`WarriorCrowd`) or the instanced soldiers in low power. Each has a faction-coloured
+ring; the viewer's has a pulsing gold ring. A wounded warrior flashes white. Rings mark the enemy
+under the cursor (pale red) and your attack target (pulsing red); a small gold ring marks your walk
+order. Name tags (name, role, gear, kingdom, hp bar, "fallen") are plain DOM in the HUD
+(`UnitLabels` in `realm-hud/Combat.tsx`), positioned every frame from the renderer's poses.
+The aggregate Garrison / camp crowds / marching columns are hidden once warriors are known.
+
+### 11.2 Controls (`lib/arena/controller.ts`, decided 2026-10-08: "every user plays with their hands")
+| input | does |
+|---|---|
+| Left click ground | walk there; the route goes round the fort and through the gate (`planRoute` in `lib/game/units.ts`) |
+| Left click enemy | chase it (re-routing round walls) and strike whenever it is in reach, until it falls |
+| W A S D / arrows | walk, screen-relative (cancels click orders); Shift runs |
+| Space | strike towards the cursor with the current weapon (bows shoot an arrow down the line) |
+| F (hold) | raise your guard towards the cursor; walk at half speed |
+| 1 – 6 | Talwar, Bhala, Dhanush, Dhal, Seedhi, Gaja (Gaja needs Gaja Sena) |
+| G | rally your kingdom at the cursor (beacon + chat line; bots of your kingdom answer it) |
+| Right drag / wheel | turn / zoom the chase camera |
+| H | hide / show the side panels |
+| Esc | cancel the current order; a second Esc leaves the realm |
+The local sim applies the program's rules (walls, gate, ladder, edge) every frame (sub-stepped on
+slow frames) and publishes `moveUnit` at 10 Hz; each swing is one `strike(x, z, facing)`. The
+local pose is authoritative for drawing your own warrior. Typing in the chat never steers. Mouse
+picking is DOM-side: a ray against the terrain height for the ground, screen distance to the
+drawn warriors for enemies. Spectators (no warrior here) keep the orbit camera on the mouse.
+
+### 11.3 Battles are fought, not watched
+Warriors stay on the field and under their players' control through MUSTER → CLASH → ROLL →
+HELD / FALLEN. What happened in the fight before the bell decides who is standing (and alive) when
+the VRF rolls (`tactics.ts` counts only living, present warriors). The scripted `Melee` only plays
+for replays and for realms whose warriors aren't tracked (devnet until Step 17). The rune wheel,
+banner and HELD / FALLEN results are unchanged.
+
+### 11.4 Camera director (`components/realm/CameraRig.tsx`, hints in `lib/arena/cameraState.ts`)
+| mode | when | shot |
+|---|---|---|
+| follow | your warrior stands in this realm (always, through the bell too) | chase camera, pitch 1.0 rad, 7.2 u; right-drag turns, wheel zooms (3.5–14); outside the walls it drifts behind you so the fort stays ahead |
+| orbit | spectating | clamped orbit, auto-rotate after 7 s idle |
+| group | spectating, ≥ 3 warriors moving, no camera input for 4 s | frames the moving crowd |
+| cinematic | spectating during battle phases | the §5 keyframes, re-aimed at the melee's centroid |
+On entering follow the camera starts behind you looking in towards the keep. Transitions are damped.
+
+### 11.5 HUD additions
+- **Action bar** (bottom centre, `realm-hud/Combat.tsx`): health, allies / enemies here, the six weapons with the cooldown sweep and stats in the tooltip, the controls reminder, and this realm's gate health ("Hold it" / "Batter it"). Above it: your current target with its hp, and order notices ("The gate is shut while defenders hold the walls…").
+- **You have fallen** overlay with the killer and the respawn countdown; **How to fight** card on the first warrior (once per browser).
+- **Follow your warrior**: when it marches or respawns into another realm the realm screen follows; a "go there" button when you are watching elsewhere. Spectators see "Pledge to … to command your own warrior".
+- **Sainik** (right column): where you stand, hp, role and gear pickers, March buttons to neighbours, key help.
+- **War council** (left column): your kingdom's warriors and the derived plan, with an "abandoned walls" warning.
+- **Kingdom chat** dock (bottom-left): members only; rally pings appear as "📍 Attack the gate of Magadh".
+- **Odds bar**: shows 🛡 defenders inside / ⚔ attackers present and "WALLS ABANDONED".
+- **War room**: the attack preview for this realm includes the tactical multipliers.
+
+### 11.6 Warriors, animation and war audio (2026-10-08, user: "it should feel like war is happening")
+- **Body:** the KayKit Knight (`public/models/knight/Knight.glb`, CC0, Kay Lousberg) with 76 real clips, loaded by `lib/arena/warriors.ts` (Mixamo files in `models/warrior/` still win; the old Soldier is the last fallback). The cape is painted flat in the kingdom colour.
+- **Per gear** (`GEAR_KIT` in `WarriorCrowd.ts`): Talwar = sword, slice / chop alternating; Bhala = spear (built), two-handed stab; Dhanush = crossbow (KayKit asset), shot; Dhal = sword + tower shield, shield bash / chop; Seedhi = sword + ladder on the back, chop; Gaja = greatsword + shield, heavy two-handed chop, 1.28× scale.
+- **One blow per strike:** every swing event (yours on the click, others' from the feed) bumps a counter that restarts the gear's attack clip, sped up to land in 0.55 s. Guard = the Blocking loop; a wound plays Hit_A (Block_Hit when guarded); 0 hp plays Death_A and lies there until respawn.
+- **Preview:** `/dev/warriors` shows all six gears trading blows with the effects, `?g=0..5` frames one pair, with a slow-motion toggle.
+- **Audio** (`lib/audio.ts`): recorded CC0 effects in `public/audio/sfx` (credits in `CREDITS.md`) with random variations, ±7% pitch, distance falloff and stereo pan from the camera: swings, heavy swings, sword clashes, plate / punch impacts, grunts, death cry and body fall, bow and arrow thuds, gate splinters, a gate-breaking crash, sword unsheathe on weapon switch, footsteps for your warrior, and a war horn at the muster, the clash and when a gate falls. War drums and a shouting crowd loop under the music, rising with the fight's intensity and at the bell. Sound is off until the player presses the speaker button (browser autoplay rules).
+- **Visibility:** your ring and a gold chevron over your head draw through walls; the shield dome fades to 30% while you fight on foot.
+
+### 11.7 Combat feedback (`components/arena/CombatFx.tsx`, `components/arena/Particles.tsx`)
+Impacts are delayed 190 ms to the swing's impact frame. Particles (two pooled point clouds): sparks + flash on blocked blows, blood + sparks + flash on wounds, a blood burst and a dust puff when someone falls, wood debris and dust on gate hits, smoke over a battered gate (embers once it is low or broken), a big burst, shockwave ring and horn when it breaks. A glowing crescent sweeps each melee swing (bigger and amber for a Gaja), arrows fly with a light streak, a Gaja's wounding blow sends a ground shockwave. The screen edge flashes red when you are hit (gold if your guard took it) and pulses red below 30 hp.
+
+### 11.8 Floating numbers and labels
+Reads the store's combat events and animates the new ones in the viewed realm: floating damage
+numbers (gold for yours, red when you are hit, "blocked", "✝" kills, "gate −14", "GATE BROKEN")
+drawn by the DOM `FloaterLayer`, arrows in flight, a sword sweep arc, synthesized sounds (swing,
+hit, hurt, arrow, death, gate), camera shake when you are hit or a gate breaks, and a toast for
+your own kills. Rally beacons (`Rallies`) are a light pillar in your kingdom's colour.
+Scene labels use `components/three/Html.tsx` (a drei `<Html>` subset that defers its root
+unmount; drei 10's synchronous unmount throws under React 19 when labels come and go).
