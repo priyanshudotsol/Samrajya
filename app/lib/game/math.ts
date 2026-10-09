@@ -428,6 +428,28 @@ export function advanceEpoch(game: Game, now: number) {
   }
 }
 
+/**
+ * Mirror of `seize` (§10.11): `faction` walked into realm `t` while no member of its owner stood
+ * alive there. Resolves that realm now (loot, losses, elimination), spends its attacks, and ends
+ * the war if `faction` now holds everything. The epoch does not move. Null if it can't be seized.
+ */
+export function seizeFort(game: Game, t: number, faction: number): BattleEntry | null {
+  if (game.phase !== 'Active' || game.pendingVrf || t >= N_KINGDOMS || game.territoryOwner[t] === faction) return null;
+  if (game.factions[faction].attackAlloc[t] <= 0n) return null;
+  const verdict = { territory: t, defender: game.territoryOwner[t], defenseBps: 10_000n, attackBps: game.factions.map(() => 10_000n), capturedBy: faction, garrison: 0, present: game.factions.map(() => 0), heads: { defendersInside: 0, defendersOutside: 0, attackers: game.factions.map(() => 0) } };
+  const e = resolveBattle(game, effectiveAllocs(game), t, 0n, verdict);
+  if (!e || e.winner !== faction) return null;
+  game.factions.forEach((f) => (f.attackAlloc[t] = 0n));
+  game.battleLog = [...game.battleLog, e].slice(-BATTLE_LOG_SIZE);
+  game.battleCount += 1;
+  const w = checkWinner(game);
+  if (w !== null) {
+    game.phase = 'Ended';
+    game.winner = w;
+  }
+  return e;
+}
+
 /** Mirror of `battle_callback`: resolve every contested territory, log, reset, advance. */
 export function resolveEpoch(game: Game, randomness: Uint8Array, now: number, tactics?: TacticalFactors[] | null): BattleEntry[] {
   const eff = effectiveAllocs(game);

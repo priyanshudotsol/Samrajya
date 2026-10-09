@@ -106,3 +106,29 @@ test('a squad that commits to an assault is teleported to the enemy gate togethe
   ixAllocate(s, squad[2], DEFEND, 0n);
   assert.equal(unitOf(s, 'c')!.at, 1);
 });
+
+test('walking into an empty fort takes it at once, without waiting for the bell', () => {
+  const s = createMockState(1000, { initialBotsPerKingdom: 0, maxBots: 0, rand: () => 0.5 });
+  const raja = ixJoin(s, 'raja', 1, s.game.config.ticket);
+  ixJoin(s, 'guard', 0, s.game.config.ticket); // Hastinapur has a member; Kalinga (2) has none
+  const epoch = s.game.epoch;
+  ixAllocate(s, raja, 2, raja.shares * 1_000_000n);
+  const u = unitOf(s, 'raja')!;
+  assert.equal(u.at, 2);
+  // at the camp outside the walls: nothing happens yet
+  stepMock(s, s.now + 0.5, () => 0.5, 'raja');
+  assert.equal(s.game.territoryOwner[2], 2);
+  // through the open gate into the courtyard: Kalinga falls now
+  Object.assign(u, { x: 0, z: 0.9 });
+  stepMock(s, s.now + 0.5, () => 0.5, 'raja');
+  assert.equal(s.game.territoryOwner[2], 1);
+  assert.equal(s.game.epoch, epoch); // no bell
+  const e = s.game.battleLog.at(-1)!;
+  assert.equal(e.territory, 2);
+  assert.equal(e.byFight, true);
+  // Hastinapur still has a living member at home: its fort is not taken that way
+  ixAllocate(s, raja, 0, raja.shares * 1_000_000n);
+  Object.assign(unitOf(s, 'raja')!, { at: 0, x: 0, z: 0.5 });
+  stepMock(s, s.now + 0.5, () => 0.5, 'raja');
+  assert.equal(s.game.territoryOwner[0], 0);
+});

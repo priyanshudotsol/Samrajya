@@ -21,6 +21,7 @@ import {
   DEFAULT_CONFIG,
   applyUpgrade,
   battleOdds,
+  seizeFort,
   burnWithFee,
   cloneGame,
   leaveFee,
@@ -477,6 +478,48 @@ function respawnFallen(s: MockState) {
   }
 }
 
+/**
+ * `seize` (§10.11): a warrior inside the walls of a realm it was ordered to attack, while no
+ * member of the owner stands alive there, takes it at once (no bell).
+ */
+function seizeAbandoned(s: MockState, rand: Rand) {
+  const g = s.game;
+  for (let t = 0; t < N_KINGDOMS; t++) {
+    if (fortHeld(g, s.units, t, s.now)) continue;
+    const owner = g.territoryOwner[t];
+    const taker = s.units.find((u) => {
+      if (u.at !== t || u.faction === owner || u.hp <= 0 || isMarching(u, s.now) || !isInside(u.x, u.z)) return false;
+      const p = s.players.find((x) => x.wallet === u.wallet);
+      return !!p && p.status === 'Active' && p.allocEpoch === g.epoch && p.allocTarget === t;
+    });
+    if (!taker) continue;
+    const e = seizeFort(g, t, taker.faction);
+    if (!e) continue;
+    for (const p of s.players) if (p.allocEpoch === g.epoch && p.allocTarget === t) {
+      p.allocTarget = DEFEND;
+      p.allocAmount = 0n;
+    }
+    afterBattles(s, [e], rand);
+    postChat(s, taker.faction, '', `${KINGDOMS[t].name} stood empty — we walked in and took it.`, true);
+  }
+}
+
+/** Once the war has a winner: note when it ended and let the winners "claim" (keeps the SOL invariant). */
+function finishIfEnded(s: MockState, now: number): boolean {
+  const g = s.game;
+  if (g.phase !== 'Ended' || s.endedAt !== null) return g.phase === 'Ended';
+  s.endedAt = now;
+  for (const p of s.players) {
+    if (p.status === 'Active' && p.faction === g.winner) {
+      const out = valueOf(g.factions[p.faction], p.shares, p.generation);
+      s.stats.claimed += out;
+      p.status = 'Claimed';
+      p.claimed = true;
+    }
+  }
+  return true;
+}
+
 /** Lands marches that have arrived. */
 function settleMarches(s: MockState) {
   for (const u of s.units) {
@@ -891,27 +934,20 @@ export function stepMock(s: MockState, now: number, rand: Rand = Math.random, me
       const entries = resolveEpoch(g, randBytes(rand), Math.floor(now), factors);
       afterBattles(s, entries, rand);
       s.vrfAt = null;
-      const ended = (g.phase as Game['phase']) === 'Ended';
-      if (ended) s.endedAt = now;
       // Stale allocations are ignored on-chain (alloc_epoch != epoch); mirror that.
       for (const p of s.players) {
         p.allocTarget = DEFEND;
         p.allocAmount = 0n;
       }
-      // Ended games: winners "claim" in the mock so the invariant holds.
-      if (ended) {
-        for (const p of s.players) {
-          if (p.status === 'Active' && p.faction === g.winner) {
-            const f = g.factions[p.faction];
-            const out = valueOf(f, p.shares, p.generation);
-            s.stats.claimed += out;
-            p.status = 'Claimed';
-            p.claimed = true;
-          }
-        }
-      }
+      finishIfEnded(s, now);
     }
     return false;
+  }
+
+  // an empty fort falls the moment an attacker walks in (§10.11)
+  if (g.phase === 'Active') {
+    seizeAbandoned(s, rand);
+    if (finishIfEnded(s, now)) return false;
   }
 
   if (now >= g.epochEndsAt) {
