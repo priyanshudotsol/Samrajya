@@ -9,8 +9,9 @@ all files were re-encoded to a smaller bitrate with metadata stripped; `victory.
 
 | File | Title | Used for | Source page | Changes |
 |---|---|---|---|---|
-| `peace.mp3` | Dhaka | calm loop (sarod, dilruba, drone) | https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1400003 | re-encoded to 128 kbps |
-| `battle.mp3` | Mountain Emperor | battle loop (taiko drums, gamelan) | https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1700012 | re-encoded to 128 kbps |
+| `peace.mp3` | Dhaka | (no longer used: no melody between fights) | https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1400003 | re-encoded to 128 kbps |
+| `war.m4a` | Five Armies | the war theme, played only while a fight is on | https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100326 | re-encoded to 128 kbps AAC |
+| `battle.mp3` | Mountain Emperor | (no longer used) | https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1700012 | re-encoded to 128 kbps |
 | `victory.mp3` | The Curtain Rises | HELD / conqueror sting | https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1500011 | first 26 s, 2 s fade-out, 160 kbps |
 | `defeat.mp3` | Long Road Ahead B | FALLEN lament sting | https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1100589 | first 24 s, 4 s fade-out, 160 kbps |
 

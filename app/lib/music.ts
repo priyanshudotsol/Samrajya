@@ -17,7 +17,8 @@ export const CROSSFADE_MS = 1200;
 
 const SRC: Record<Track, string> = {
   peace: '/audio/music/peace.mp3',
-  battle: '/audio/music/battle.mp3',
+  // "Five Armies" (Kevin MacLeod, CC BY 4.0): an epic war theme for the fights
+  battle: '/audio/music/war.m4a',
   victory: '/audio/music/victory.mp3',
   defeat: '/audio/music/defeat.mp3',
 };
