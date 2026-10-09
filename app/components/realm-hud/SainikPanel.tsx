@@ -5,7 +5,8 @@ import { Footprints, Keyboard, Swords } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { useTactical } from '@/lib/arena/useTactics';
-import { KINGDOMS, kingdomInk } from '@/lib/game/factions';
+import { KINGDOMS, kingdomInk, territoryName } from '@/lib/game/factions';
+import { PLAINS } from '@/lib/game/types';
 import { GEARS, gearAllowed, isMarching, MARCH_SECS, marchProgress, marchTargets, ROLES, zoneOf, ZONE_LABEL, type Gear, type Role } from '@/lib/game/units';
 import { useFieldStatus } from '@/lib/multiplayer/useFieldSync';
 import { isMockMode, useGame } from '@/lib/store/game';
@@ -143,10 +144,10 @@ export function SainikPanel({ territory }: { territory: number }) {
               variant="outline"
               disabled={locked}
               clipCorners="top-left-bottom-right"
-              onClick={() => void run('march', [t], game.territoryOwner[t] === u.faction ? `Teleported to ${KINGDOMS[t].name}` : `Teleported to the gate of ${KINGDOMS[t].name}`)}
+              onClick={() => void run('march', [t], game.territoryOwner[t] === u.faction ? `Teleported to ${territoryName(t)}` : t === PLAINS ? `Teleported to ${territoryName(t)}` : `Teleported to the gate of ${territoryName(t)}`)}
               title={game.territoryOwner[t] === u.faction ? 'Your kingdom holds this realm' : `Held by ${KINGDOMS[game.territoryOwner[t]].name}`}
             >
-              → <span style={{ color: kingdomInk(game.territoryOwner[t]) }}>{KINGDOMS[t].name}</span>
+              → <span style={{ color: kingdomInk(game.territoryOwner[t]) }}>{territoryName(t)}</span>
             </Button>
           ))}
         </div>

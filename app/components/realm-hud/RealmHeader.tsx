@@ -6,7 +6,8 @@ import { ArrowLeft, Sun } from 'lucide-react';
 import { CountdownTimer } from '@/components/countdown-timer';
 import { ConnectWalletButton } from '@/components/wallet';
 import { WarControl } from '@/components/world/war-control';
-import { KINGDOMS, kingdomInk, powersFromMask } from '@/lib/game/factions';
+import { KINGDOMS, kingdomInk, PLAINS_INFO, powersFromMask } from '@/lib/game/factions';
+import { NEUTRAL, PLAINS } from '@/lib/game/types';
 import { useGame } from '@/lib/store/game';
 
 import { useNow } from './kit';
@@ -32,8 +33,9 @@ export function RealmHeader({ territory, compact = false }: { territory: number;
   const now = useNow(500);
   if (!game) return null;
   const owner = game.territoryOwner[territory];
+  const plains = territory === PLAINS;
   const k = KINGDOMS[territory];
-  const powers = powersFromMask(game.factions[owner].powers);
+  const powers = owner === NEUTRAL ? [] : powersFromMask(game.factions[owner].powers);
   const remaining = game.epochEndsAt - now / 1000;
   const progress = game.pendingVrf ? 1 : Math.min(1, Math.max(0, 1 - remaining / game.config.epochSecs));
 
@@ -44,9 +46,19 @@ export function RealmHeader({ territory, compact = false }: { territory: number;
       </Link>
       <div className="flex items-baseline gap-2">
         <h1 className="font-rozha text-2xl leading-none md:text-3xl" style={{ color: kingdomInk(owner) }}>
-          {KINGDOMS[owner].name.toUpperCase()}
+          {plains ? PLAINS_INFO.name.toUpperCase() : KINGDOMS[owner].name.toUpperCase()}
         </h1>
-        {owner !== territory && (
+        {plains ? (
+          <span className="text-xs text-text-secondary">
+            {owner === NEUTRAL ? (
+              'unclaimed · stand in the stone circle to claim it'
+            ) : (
+              <>
+                held by <span style={{ color: kingdomInk(owner) }}>{KINGDOMS[owner].name}</span> · it holds while one of them stands here
+              </>
+            )}
+          </span>
+        ) : owner !== territory && (
           <span className="text-xs text-text-secondary">
             conquered <span style={{ color: kingdomInk(territory) }}>{k.name}</span>
           </span>

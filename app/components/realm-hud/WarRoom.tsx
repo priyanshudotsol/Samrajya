@@ -104,7 +104,7 @@ export function WarRoom({ territory }: { territory: number }) {
   if (!mem || myF === null) {
     return (
       <Panel title="War room" icon={<Swords className="h-3.5 w-3.5" />} highlight={highlight}>
-        <p className="text-xs text-text-secondary">Pledge to a kingdom to command its troops. Spectating {KINGDOMS[territory].name}.</p>
+        <p className="text-xs text-text-secondary">Pledge to a kingdom to command its troops. Spectating {territoryName(territory)}.</p>
       </Panel>
     );
   }
@@ -168,12 +168,12 @@ export function WarRoom({ territory }: { territory: number }) {
           <p className="text-[11px] text-text-secondary">
             {choice < N_KINGDOMS
               ? `Commit and your warrior is teleported to ${territoryName(choice)}'s gate with the squad${squad ? ` (${squad} of yours ordered there)` : ''}. The fight decides: clear the walls before the bell and it is yours.`
-              : 'The open plains are taken with committed strength alone.'}
+              : `Commit and your warrior is teleported to the edge of Kurukshetra with the squad${squad ? ` (${squad} of yours ordered there)` : ''}. Kill every defender on the plains and stand in the stone circle: it is yours at once.`}
           </p>
         </div>
       )}
 
-      {preview?.kind === 'attack' && byFight && choice !== PLAINS ? (
+      {preview?.kind === 'attack' && byFight ? (
         <div className="mt-2 text-sm">
           {!tactics || choice !== territory ? (
             <span>No dice: your squad must clear {territoryName(choice)}&apos;s walls and hold its gate at the bell.</span>

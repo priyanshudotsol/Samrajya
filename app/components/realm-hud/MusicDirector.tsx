@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react';
 
 import { useBattle } from '@/lib/arena/battleMachine';
+import { playSfx } from '@/lib/audio';
 import { playSting, setMusicBed, stopMusic } from '@/lib/music';
 import { useGame } from '@/lib/store/game';
 
@@ -11,10 +12,11 @@ const FIGHT_LINGER_MS = 6000;
 const COMBAT_KINDS = new Set(['swing', 'hit', 'block', 'arrow', 'kill']);
 
 /**
- * Drives the background music (renders nothing). The war music plays only while a fight is
- * actually happening in the realm on screen (someone attacked: swings, hits, arrows, kills) and
- * fades back to the peace loop a few seconds after the last blow. The bell's verdict still plays
- * a sting: HELD → victory; FALLEN → defeat, or victory when the viewer's kingdom conquered.
+ * Drives the background music (renders nothing). The war theme plays only while a fight is
+ * actually happening in the realm on screen (someone attacked: swings, hits, arrows, kills), opened
+ * by a war horn, and fades out a few seconds after the last blow. Between fights there is no
+ * melody (the user did not want one), just the world. The bell's verdict still plays a sting:
+ * HELD → victory; FALLEN → defeat, or victory when the viewer's kingdom conquered.
  */
 export function MusicDirector({ territory }: { territory: number }) {
   const phase = useBattle((s) => s.phase);
@@ -29,19 +31,20 @@ export function MusicDirector({ territory }: { territory: number }) {
     seen.current = fresh[fresh.length - 1].id;
     const now = Date.now() / 1000;
     if (fresh.some((e) => e.territory === territory && COMBAT_KINDS.has(e.kind) && now - e.at < 3)) {
+      if (!lastBlow.current) playSfx('warhorn', { volume: 0.8 });
       lastBlow.current = performance.now();
       setMusicBed('battle');
     }
   }, [events, territory]);
 
-  // ...and the peace loop returns once the fighting has stopped
+  // ...and fades out once the fighting has stopped (no melody between fights)
   useEffect(() => {
     lastBlow.current = 0;
-    setMusicBed('peace');
+    setMusicBed(null);
     const id = setInterval(() => {
       if (lastBlow.current && performance.now() - lastBlow.current > FIGHT_LINGER_MS) {
         lastBlow.current = 0;
-        setMusicBed('peace');
+        setMusicBed(null);
       }
     }, 500);
     return () => clearInterval(id);

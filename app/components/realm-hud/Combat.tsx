@@ -9,8 +9,9 @@ import * as THREE from 'three';
 import { cameraState } from '@/lib/arena/cameraState';
 import { control, drawn } from '@/lib/arena/controller';
 import { FLOAT_MS, floaters } from '@/lib/arena/fx';
+import { PLAINS } from '@/lib/game/types';
 import { HEAVY_CHARGE_FULL, HEAVY_CHARGE_MIN, weaponOf } from '@/lib/game/combat';
-import { KINGDOMS, kingdomInk } from '@/lib/game/factions';
+import { KINGDOMS, kingdomInk, territoryName } from '@/lib/game/factions';
 import { GEARS, gearAllowed, isMarching, marchPose, shortWallet, type Gear } from '@/lib/game/units';
 import { useGame } from '@/lib/store/game';
 
@@ -94,7 +95,7 @@ export function ActionBar({ territory }: { territory: number }) {
             ) : u.hp <= 0 ? (
               'Fallen'
             ) : (
-              `In ${KINGDOMS[marchPose(u, nowS).at].name}`
+              `In ${territoryName(marchPose(u, nowS).at)}`
             )}
           </div>
         </div>
@@ -161,14 +162,22 @@ export function ActionBar({ territory }: { territory: number }) {
         {/* the gate: shut to enemies while one defender lives (§10.10) */}
         <div className="w-28">
           <div className="mb-0.5 flex justify-between text-[10px] tracking-[0.15em] text-text-highlight">
-            <span>GATE</span>
-            <span className="tabular-nums text-text-primary">{defendersAlive > 0 ? 'SHUT' : 'OPEN'}</span>
+            <span>{territory === PLAINS ? 'CIRCLE' : 'GATE'}</span>
+            <span className="tabular-nums text-text-primary">{defendersAlive > 0 ? (territory === PLAINS ? 'HELD' : 'SHUT') : 'OPEN'}</span>
           </div>
           <div className="h-2.5 w-full border border-border-muted bg-black/10">
             <div className="h-full" style={{ width: defendersAlive > 0 ? '100%' : '0%', background: '#9a6b3a' }} />
           </div>
           <div className="mt-1 text-[10px] text-text-secondary">
-            {owner === u.faction ? 'Hold the gate' : defendersAlive > 0 ? `${defendersAlive} defender${defendersAlive === 1 ? '' : 's'} alive` : 'Walk in!'}
+            {owner === u.faction
+              ? territory === PLAINS
+                ? 'Hold the plains'
+                : 'Hold the gate'
+              : defendersAlive > 0
+                ? `${defendersAlive} defender${defendersAlive === 1 ? '' : 's'} alive`
+                : territory === PLAINS
+                  ? 'Stand in the circle!'
+                  : 'Walk in!'}
           </div>
         </div>
       </div>
@@ -292,7 +301,7 @@ export function FollowWarrior({ territory }: { territory: number }) {
       className="pointer-events-auto border border-border-active bg-background-panel/95 px-3 py-1.5 text-xs text-text-primary shadow hover:brightness-105"
       onClick={() => router.push(`/kingdom/${at}`)}
     >
-      Your warrior is in <span style={{ color: kingdomInk(game.territoryOwner[at]) }}>{KINGDOMS[at].name}</span> — go there →
+      Your warrior is in <span style={{ color: kingdomInk(game.territoryOwner[at]) }}>{territoryName(at)}</span> — go there →
     </button>
   );
 }
@@ -305,8 +314,14 @@ export function CommandPrompt({ territory }: { territory: number }) {
   const owner = game.territoryOwner[territory];
   return (
     <div className="pointer-events-none border border-border-active bg-background-panel/95 px-3 py-1.5 text-xs text-text-primary shadow">
-      <Swords className="mr-1 inline h-3.5 w-3.5" /> Spectating. Pledge to <span style={{ color: kingdomInk(owner) }}>{KINGDOMS[owner].name}</span> (right panel) to
-      command your own warrior.
+      <Swords className="mr-1 inline h-3.5 w-3.5" />{' '}
+      {KINGDOMS[owner] ? (
+        <>
+          Spectating. Pledge to <span style={{ color: kingdomInk(owner) }}>{KINGDOMS[owner].name}</span> (right panel) to command your own warrior.
+        </>
+      ) : (
+        'Spectating Kurukshetra. Pledge to a kingdom on the world map to fight for it.'
+      )}
     </div>
   );
 }

@@ -8,7 +8,8 @@ import { toast } from 'sonner';
 import { localPose, useUnitController } from '@/lib/arena/controller';
 import { isMuted, play, setMuted, subscribeAudio } from '@/lib/audio';
 import { KINGDOMS } from '@/lib/game/factions';
-import { isInside } from '@/lib/game/units';
+import { PLAINS } from '@/lib/game/types';
+import { inCircle, isInside } from '@/lib/game/units';
 import { useFieldSync } from '@/lib/multiplayer/useFieldSync';
 import { useRealmUi } from '@/lib/realm/ui-store';
 import { useGame } from '@/lib/store/game';
@@ -25,6 +26,7 @@ import { KingdomChat } from './KingdomChat';
 import { KingdomStats } from './KingdomStats';
 import { MusicDirector } from './MusicDirector';
 import { OddsBar } from './OddsBar';
+import { PlainsPanel } from './PlainsPanel';
 import { RealmHeader } from './RealmHeader';
 import { SainikPanel } from './SainikPanel';
 import { WarCouncil } from './WarCouncil';
@@ -79,14 +81,15 @@ function useSeize() {
       const me = s.me;
       if (!actions || !s.onER || !g || g.phase !== 'Active' || g.pendingVrf || !me || !localPose.active) return;
       const t = localPose.at;
-      if (t >= 6 || g.territoryOwner[t] === me.faction || me.allocEpoch !== g.epoch || me.allocTarget !== t) return;
-      if (!isInside(localPose.x, localPose.z)) return;
+      if (g.territoryOwner[t] === me.faction || me.allocEpoch !== g.epoch || me.allocTarget !== t) return;
+      // inside the walls of a fort, or in Kurukshetra's stone circle
+      if (!(t === PLAINS ? inCircle(localPose.x, localPose.z) : isInside(localPose.x, localPose.z))) return;
       if (s.units.some((u) => u.at === t && u.faction === g.territoryOwner[t] && u.hp > 0)) return;
       if (Date.now() - tried.current < 4000) return;
       tried.current = Date.now();
       actions
         .seize(localPose.x, localPose.z)
-        .then(() => toast.success(`${KINGDOMS[t].name} stood empty — you walked in and took it!`))
+        .then(() => toast.success(t === PLAINS ? 'You stand in the stone circle: Kurukshetra is yours!' : `${KINGDOMS[t].name} stood empty — you walked in and took it!`))
         .catch(() => {});
     }, 500);
     return () => clearInterval(id);
@@ -94,7 +97,7 @@ function useSeize() {
 }
 
 const MUSIC_CREDIT =
-  'Music: "Dhaka", "Mountain Emperor", "The Curtain Rises", "Long Road Ahead B" by Kevin MacLeod (incompetech.com), licensed under Creative Commons: By Attribution 4.0 (http://creativecommons.org/licenses/by/4.0/). Trimmed/re-encoded.';
+  'Music: "Five Armies", "The Curtain Rises", "Long Road Ahead B" by Kevin MacLeod (incompetech.com), licensed under Creative Commons: By Attribution 4.0 (http://creativecommons.org/licenses/by/4.0/). Trimmed/re-encoded.';
 
 function Toggles() {
   const muted = useSyncExternalStore(subscribeAudio, isMuted, () => true);
@@ -143,6 +146,16 @@ function Toggles() {
 }
 
 function RightColumn({ territory }: { territory: number }) {
+  // Kurukshetra is nobody's kingdom: no joining or treasury panels there, just the fight
+  if (territory === PLAINS) {
+    return (
+      <>
+        <SainikPanel territory={territory} />
+        <WarRoom territory={territory} />
+        <BattleLog territory={territory} />
+      </>
+    );
+  }
   return (
     <>
       <HostCard />
@@ -223,8 +236,14 @@ export function RealmHud({ territory, narrow }: { territory: number; narrow: boo
                 className="h-[calc(62vh-80px)] space-y-2 overflow-y-auto px-3 pb-6"
               >
                 <RightColumn territory={territory} />
-                <KingdomStats territory={territory} />
-                <IncomingPanel territory={territory} />
+                {territory === PLAINS ? (
+                  <PlainsPanel />
+                ) : (
+                  <>
+                    <KingdomStats territory={territory} />
+                    <IncomingPanel territory={territory} />
+                  </>
+                )}
                 <WarCouncil />
               </motion.div>
             )}
@@ -247,8 +266,14 @@ export function RealmHud({ territory, narrow }: { territory: number; narrow: boo
       <div className="flex min-h-0 flex-1 justify-between gap-3">
         <div className={`flex w-[290px] min-h-0 flex-col justify-between gap-3 ${hudHidden ? 'invisible' : ''}`}>
           <div className="pointer-events-auto flex min-h-0 flex-col gap-3 overflow-y-auto">
-            <KingdomStats territory={territory} />
-            <IncomingPanel territory={territory} />
+            {territory === PLAINS ? (
+              <PlainsPanel />
+            ) : (
+              <>
+                <KingdomStats territory={territory} />
+                <IncomingPanel territory={territory} />
+              </>
+            )}
             <WarCouncil />
           </div>
           <KingdomChat />
