@@ -39,6 +39,11 @@ export interface GameActions {
    * charged blow (×1.8, breaks a guard); `combo` = position in a light chain (3 = finisher).
    */
   strike(x: number, z: number, facing: number, opts?: StrikeOpts): Promise<void>;
+  /**
+   * ER `seize(x, z)` (§10.11): you stand inside an enemy realm you were ordered to attack and no
+   * member of its owner is alive there, so it falls at once. Sent by the HUD when that happens.
+   */
+  seize(x: number, z: number): Promise<void>;
   /** Rally ping: ask your kingdom to gather at (x, z) in `territory` (kingdom chat + a beacon). */
   rally(territory: number, x: number, z: number): Promise<void>;
 }

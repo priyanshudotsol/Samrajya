@@ -502,7 +502,7 @@ export function chainActions(wallet: BrowserWallet, onStep: (s: ActionStep) => v
 
   // ------------------------------------------------------------------ warriors on the ER
 
-  function unitActions(): Pick<GameActions, 'moveUnit' | 'setRole' | 'setGear' | 'march' | 'strike' | 'rally'> {
+  function unitActions(): Pick<GameActions, 'moveUnit' | 'setRole' | 'setGear' | 'march' | 'strike' | 'rally' | 'seize'> {
     const local = localUnitActions(wallet.publicKey.toBase58());
     const me = wallet.publicKey.toBase58();
     const onER = () => useGame.getState().onER === true;
@@ -614,6 +614,17 @@ export function chainActions(wallet: BrowserWallet, onStep: (s: ActionStep) => v
           .remainingAccounts(targets.map((o) => ({ pubkey: playerPda(game, new PublicKey(o.wallet)), isSigner: false, isWritable: true })))
           .instruction();
         await sendER([ix]);
+      },
+      async seize(x, z) {
+        if (!onER()) return;
+        const s = await ensureSession();
+        const ix = await programER.methods
+          .seize(i16(x), i16(z))
+          .accountsPartial(actionAccounts(s.kp.publicKey, s.token))
+          // every member with shares: the program checks the owner's are all there and all down
+          .remainingAccounts(await musterAccounts(programER, erConnection(), game))
+          .instruction();
+        await sendER([ix], true);
       },
       rally: local.rally,
     };

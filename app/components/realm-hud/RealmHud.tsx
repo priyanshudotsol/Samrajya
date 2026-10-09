@@ -3,9 +3,13 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronUp, Cpu, PanelsTopLeft, Volume2, VolumeX } from 'lucide-react';
+import { toast } from 'sonner';
 
-import { useUnitController } from '@/lib/arena/controller';
+import { localPose, useUnitController } from '@/lib/arena/controller';
 import { isMuted, play, setMuted, subscribeAudio } from '@/lib/audio';
+import { KINGDOMS } from '@/lib/game/factions';
+import { isInside } from '@/lib/game/units';
+import { useFieldSync } from '@/lib/multiplayer/useFieldSync';
 import { useRealmUi } from '@/lib/realm/ui-store';
 import { useGame } from '@/lib/store/game';
 
@@ -16,7 +20,6 @@ import { HostCard } from './HostCard';
 import { ActionBar, CommandPrompt, FallenOverlay, FloaterLayer, FollowWarrior, HowToFight, HurtVignette, UnitLabels } from './Combat';
 import { IncomingPanel } from './IncomingPanel';
 import { JoinCard } from './JoinCard';
-import { useFieldSync } from '@/lib/multiplayer/useFieldSync';
 
 import { KingdomChat } from './KingdomChat';
 import { KingdomStats } from './KingdomStats';
@@ -58,6 +61,34 @@ function useRespawn() {
       const u = s.units.find((x) => x.wallet === s.wallet);
       if (u && u.hp <= 0 && u.deadUntil > 0 && Date.now() / 1000 >= u.deadUntil) actions.moveUnit(u.x, u.z, u.facing, 0).catch(() => {});
     }, 1000);
+    return () => clearInterval(id);
+  }, [actions]);
+}
+
+/**
+ * §10.11: the moment your warrior stands inside an enemy realm you were ordered to attack and
+ * nobody of its kingdom is alive there, claim it (`seize`): no waiting for the bell.
+ */
+function useSeize() {
+  const { actions } = useHudActions();
+  const tried = useRef(0);
+  useEffect(() => {
+    const id = setInterval(() => {
+      const s = useGame.getState();
+      const g = s.game;
+      const me = s.me;
+      if (!actions || !s.onER || !g || g.phase !== 'Active' || g.pendingVrf || !me || !localPose.active) return;
+      const t = localPose.at;
+      if (t >= 6 || g.territoryOwner[t] === me.faction || me.allocEpoch !== g.epoch || me.allocTarget !== t) return;
+      if (!isInside(localPose.x, localPose.z)) return;
+      if (s.units.some((u) => u.at === t && u.faction === g.territoryOwner[t] && u.hp > 0)) return;
+      if (Date.now() - tried.current < 4000) return;
+      tried.current = Date.now();
+      actions
+        .seize(localPose.x, localPose.z)
+        .then(() => toast.success(`${KINGDOMS[t].name} stood empty — you walked in and took it!`))
+        .catch(() => {});
+    }, 500);
     return () => clearInterval(id);
   }, [actions]);
 }
@@ -147,6 +178,7 @@ function CentreStack({ territory }: { territory: number }) {
 export function RealmHud({ territory, narrow }: { territory: number; narrow: boolean }) {
   useKeeper();
   useRespawn();
+  useSeize();
   // every member's warrior on everyone's screen in the lobby (during the war they come from the ER)
   useFieldSync();
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -204,7 +236,7 @@ export function RealmHud({ territory, narrow }: { territory: number; narrow: boo
 
   return (
     <div className="pointer-events-none absolute inset-0 z-20 flex flex-col gap-3 p-3">
-      <MusicDirector />
+      <MusicDirector territory={territory} />
       <UnitController territory={territory} />
       <UnitLabels territory={territory} />
       <FloaterLayer />

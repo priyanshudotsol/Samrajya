@@ -59,6 +59,8 @@ export function mockActions(wallet: string): GameActions {
     setRole: (role) => run(() => ixSetRole(mock().state, me(wallet), role)),
     setGear: (gear) => run(() => ixSetGear(mock().state, me(wallet), gear)),
     march: (to) => run(() => ixMarch(mock().state, me(wallet), to)),
+    // the mock seizes an empty fort on its own tick (mockGame `seizeAbandoned`)
+    seize: async () => {},
     strike: (x, z, facing, opts) => run(() => void ixStrike(mock().state, me(wallet), x, z, facing, opts)),
     rally: (territory, x, z) => run(() => ixRally(mock().state, me(wallet), territory, x, z)),
   };

@@ -1554,6 +1554,98 @@ export type Samrajya = {
       ]
     },
     {
+      "name": "seize",
+      "docs": [
+        "Walks into an abandoned fort (§10.11): your warrior steps to (x, z) inside realm `at`'s walls",
+        "with an order on it, and no member of its owner stands alive there. Remaining accounts:",
+        "every Player with shares (the owner's are checked complete). The realm falls at once."
+      ],
+      "discriminator": [
+        129,
+        159,
+        143,
+        31,
+        161,
+        224,
+        241,
+        84
+      ],
+      "accounts": [
+        {
+          "name": "signer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "game",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  97,
+                  109,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "game.game_id",
+                "account": "game"
+              }
+            ]
+          },
+          "relations": [
+            "player"
+          ]
+        },
+        {
+          "name": "player",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  97,
+                  121,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "game"
+              },
+              {
+                "kind": "account",
+                "path": "player.wallet",
+                "account": "player"
+              }
+            ]
+          }
+        },
+        {
+          "name": "sessionToken",
+          "optional": true
+        }
+      ],
+      "args": [
+        {
+          "name": "x",
+          "type": "i16"
+        },
+        {
+          "name": "z",
+          "type": "i16"
+        }
+      ]
+    },
+    {
       "name": "startGame",
       "docs": [
         "Closes the lobby. The authority may start any time; anyone else once the lobby",
@@ -2233,6 +2325,11 @@ export type Samrajya = {
       "code": 6030,
       "name": "incompleteMuster",
       "msg": "Every member's warrior must be mustered for the bell"
+    },
+    {
+      "code": 6031,
+      "name": "fortHeld",
+      "msg": "A defender still holds that fort"
     }
   ],
   "types": [

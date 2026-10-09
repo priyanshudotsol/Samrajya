@@ -76,6 +76,7 @@ export function useGameActions() {
       march: wrap(raw.march),
       // strikes are rapid-fire: no busy flag, errors (cooldown, fallen) are expected and silent
       strike: raw.strike,
+      seize: raw.seize,
       rally: wrap(raw.rally),
     };
   }, [publicKey, signTransaction, signAllTransactions, gameId]);
