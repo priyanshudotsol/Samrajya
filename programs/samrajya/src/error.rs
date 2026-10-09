@@ -8,8 +8,8 @@ pub enum SamrajyaError {
     WrongPhase,
     #[msg("Only the game authority can do this")]
     Unauthorized,
-    #[msg("Stake is below the minimum")]
-    StakeTooSmall,
+    #[msg("Entry must equal the ticket price")]
+    WrongTicket,
     #[msg("Invalid kingdom index")]
     InvalidFaction,
     #[msg("Invalid territory index")]
@@ -42,6 +42,26 @@ pub enum SamrajyaError {
     AlreadyClaimed,
     #[msg("Player must withdraw pending funds first")]
     PendingWithdrawal,
+    #[msg("Upgrade already at its highest level")]
+    MaxLevel,
+    #[msg("Your kingdom already bought an upgrade this epoch")]
+    UpgradeCooldown,
+    #[msg("The treasury cannot pay for that")]
+    CannotAfford,
+    #[msg("The lobby is still open, or fewer than two kingdoms have members")]
+    LobbyNotReady,
+    #[msg("The next war must take the next game id")]
+    StaleGameId,
+    #[msg("The current war has not ended (or its result is not committed to Solana yet)")]
+    PreviousWarNotOver,
     #[msg("Math overflow")]
     MathOverflow,
+    #[msg("Your warrior has fallen and waits for the bell")]
+    Fallen,
+    #[msg("That move is not allowed")]
+    InvalidUnit,
+    #[msg("Your weapon is not ready yet")]
+    NotReady,
+    #[msg("Every member's warrior must be mustered for the bell")]
+    IncompleteMuster,
 }

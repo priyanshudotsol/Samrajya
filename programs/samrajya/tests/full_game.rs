@@ -7,7 +7,9 @@ use anchor_lang::{
     system_program, AccountDeserialize, InstructionData, ToAccountMetas,
 };
 use litesvm::LiteSVM;
-use samrajya::{accounts, instruction, Game, GameConfig, Phase, Player, DEFEND, GAME_SEED, N, PLAYER_SEED, VAULT_SEED};
+use samrajya::{
+    accounts, instruction, Game, GameConfig, Phase, Player, DEFEND, GAME_SEED, N, PLAINS, PLAYER_SEED, REGISTRY_SEED, T, UPGRADES, VAULT_SEED,
+};
 use solana_keypair::Keypair;
 use solana_message::{Message, VersionedMessage};
 use solana_signer::Signer;
@@ -39,13 +41,33 @@ impl Env {
         let game = Pubkey::find_program_address(&[GAME_SEED, &game_id.to_le_bytes()], &samrajya::id()).0;
         let vault = Pubkey::find_program_address(&[VAULT_SEED, game.as_ref()], &samrajya::id()).0;
         let mut env = Env { svm, admin, game, vault };
-        let ix = Instruction::new_with_bytes(
-            samrajya::id(),
-            &instruction::InitGame { game_id, config: GameConfig::default_with(SOL / 20, EPOCH_SECS, SOL / 10) }.data(),
-            accounts::InitGame { authority: env.admin.pubkey(), game, vault, system_program: system_program::ID }.to_account_metas(None),
-        );
+        let ix = env.init_ix(game_id);
         env.send(&[ix], &[&env.admin.insecure_clone()]).unwrap();
         env
+    }
+
+    fn init_ix(&self, game_id: u64) -> Instruction {
+        self.init_ix_after(game_id, None)
+    }
+
+    fn init_ix_after(&self, game_id: u64, previous: Option<Pubkey>) -> Instruction {
+        let game = Pubkey::find_program_address(&[GAME_SEED, &game_id.to_le_bytes()], &samrajya::id()).0;
+        let vault = Pubkey::find_program_address(&[VAULT_SEED, game.as_ref()], &samrajya::id()).0;
+        let registry = Pubkey::find_program_address(&[REGISTRY_SEED], &samrajya::id()).0;
+        Instruction::new_with_bytes(
+            samrajya::id(),
+            &instruction::InitGame { game_id, config: GameConfig::default_with(SOL, EPOCH_SECS, SOL / 10) }.data(),
+            accounts::InitGame { authority: self.admin.pubkey(), game, registry, previous, vault, system_program: system_program::ID }
+                .to_account_metas(None),
+        )
+    }
+
+    fn start_ix(&self, signer: &Pubkey) -> Instruction {
+        Instruction::new_with_bytes(
+            samrajya::id(),
+            &instruction::StartGame {}.data(),
+            accounts::StartGame { signer: *signer, game: self.game }.to_account_metas(None),
+        )
     }
 
     fn send(&mut self, ixs: &[Instruction], signers: &[&Keypair]) -> Result<(), String> {
@@ -183,9 +205,10 @@ fn full_war_on_base_layer() {
     assert_eq!(g.factions[0].members, 2);
     assert_eq!(g.factions[0].treasury, 2 * SOL);
 
-    // Stake below minimum is rejected.
-    let poor = env.new_wallet(SOL);
-    assert!(env.join_and_enlist(&poor, 0, SOL / 100).is_err());
+    // Everyone pays the same ticket.
+    let odd = env.new_wallet(5 * SOL);
+    assert!(env.join_and_enlist(&odd, 0, SOL / 100).is_err());
+    assert!(env.join_and_enlist(&odd, 0, 2 * SOL).is_err());
 
     // Lobby: switching is free.
     let (w0, _) = &players[0];
@@ -194,15 +217,12 @@ fn full_war_on_base_layer() {
     players[0].1 = 1;
     assert_eq!(env.game().factions[1].treasury, 3 * SOL);
 
-    // Only the authority can start.
-    let ix = Instruction::new_with_bytes(
-        samrajya::id(),
-        &instruction::StartGame {}.data(),
-        accounts::AuthorityGame { authority: w0.pubkey(), game: env.game }.to_account_metas(None),
-    );
+    // Only the authority can start while the lobby timer runs; anyone may once it is over.
+    let ix = env.start_ix(&w0.pubkey());
     assert!(env.send(&[ix], &[&w0]).is_err());
-    let ix = env.admin_ix(instruction::StartGame {}.data());
-    env.send(&[ix], &[&env.admin.insecure_clone()]).unwrap();
+    env.warp(env.game().config.lobby_secs);
+    let ix = env.start_ix(&w0.pubkey());
+    env.send(&[ix], &[&w0]).unwrap();
     assert_eq!(env.game().phase, Phase::Active);
 
     // Resolving before the bell fails.
@@ -254,8 +274,8 @@ fn full_war_on_base_layer() {
                 continue;
             }
             let fi = p.faction as usize;
-            let owned: u8 = (0..N).filter(|&t| g.territory_owner[t] as usize == fi).fold(0, |m, t| m | 1 << t);
-            let targets: Vec<u8> = (0..N as u8)
+            let owned: u8 = (0..T).filter(|&t| g.territory_owner[t] as usize == fi).fold(0, |m, t| m | 1 << t);
+            let targets: Vec<u8> = (0..T as u8)
                 .filter(|&t| g.territory_owner[t as usize] as usize != fi && g.config.adjacency[t as usize] & owned != 0)
                 .collect();
             if targets.is_empty() {
@@ -263,6 +283,11 @@ fn full_war_on_base_layer() {
             }
             let r = rand32(&mut seed);
             let t = targets[r[0] as usize % targets.len()];
+            if r[1] < 40 {
+                // Sometimes spend treasury on walls or the armory (fails when already bought this epoch).
+                let w = w.insecure_clone();
+                let _ = env.act(&w, instruction::Upgrade { kind: r[2] % UPGRADES as u8 }.data());
+            }
             let value = (p.shares * g.factions[fi].treasury as u128 / g.factions[fi].total_shares) as u64;
             let w = w.insecure_clone();
             env.act(&w, instruction::Allocate { target: t, amount: value * 3 / 4 }.data()).unwrap();
@@ -275,11 +300,13 @@ fn full_war_on_base_layer() {
     let g = env.game();
     let winner = g.winner;
     assert!(g.territory_owner.iter().all(|&o| o == winner));
+    assert_eq!(g.territory_owner[PLAINS], winner);
+    assert_eq!(g.plains_pot, 0);
     assert_eq!(g.factions.iter().filter(|f| f.alive).count(), 1);
     assert!(g.battle_count > 0);
     println!("war ended after {epochs} epochs, winner kingdom {winner}, battles {}", g.battle_count);
 
-    // Losers cannot claim; winners split the whole pot.
+    // Losers cannot claim; winners split the whole pot equally.
     let mut claimed = 0u64;
     for (w, _) in players.iter() {
         let p = env.player(&w.pubkey());
@@ -306,8 +333,14 @@ fn allocate_validation() {
     env.join_and_enlist(&a, 0, SOL).unwrap();
     // Not active yet.
     assert!(env.act(&a, instruction::Allocate { target: 1, amount: SOL / 2 }.data()).is_err());
-    let ix = env.admin_ix(instruction::StartGame {}.data());
+    // One kingdom alone cannot be started by a non-authority, even after the lobby timer.
+    env.warp(env.game().config.lobby_secs);
+    let ix = env.start_ix(&a.pubkey());
+    assert!(env.send(&[ix], &[&a]).is_err());
+    let ix = env.start_ix(&env.admin.pubkey());
     env.send(&[ix], &[&env.admin.insecure_clone()]).unwrap();
+    // The plains border every homeland.
+    env.act(&a, instruction::Allocate { target: PLAINS as u8, amount: SOL / 4 }.data()).unwrap();
     assert!(env.act(&a, instruction::Allocate { target: 0, amount: 1 }.data()).is_err()); // own
     assert!(env.act(&a, instruction::Allocate { target: 3, amount: 1 }.data()).is_err()); // not adjacent
     assert!(env.act(&a, instruction::Allocate { target: 1, amount: 2 * SOL }.data()).is_err()); // too much
@@ -328,9 +361,55 @@ fn allocate_validation() {
 
 
 #[test]
+fn next_war_opens_only_after_the_last_one_ends() {
+    let mut env = Env::new();
+    let admin = env.admin.insecure_clone();
+    let stranger = env.new_wallet(5 * SOL);
+    let game1 = env.game;
+    // While war 1 is undecided nobody can open war 2.
+    let ix = env.init_ix_after(2, Some(game1));
+    assert!(env.send(&[ix], &[&admin]).is_err());
+    let ix = env.init_ix_after(2, None);
+    assert!(env.send(&[ix], &[&admin]).is_err());
+
+    // Play war 1 out: one kingdom attacks its empty neighbours with everything until it rules all.
+    let w = env.new_wallet(5 * SOL);
+    env.join_and_enlist(&w, 0, SOL).unwrap();
+    let ix = env.start_ix(&admin.pubkey());
+    env.send(&[ix], &[&admin]).unwrap();
+    let mut seed = 99u64;
+    let mut epochs = 0;
+    while env.game().phase == Phase::Active {
+        epochs += 1;
+        assert!(epochs < 300, "solo war did not end");
+        let g = env.game();
+        let owned: u8 = (0..T).filter(|&t| g.territory_owner[t] == 0).fold(0, |m, t| m | 1 << t);
+        if let Some(t) = (0..T as u8).find(|&t| g.territory_owner[t as usize] != 0 && g.config.adjacency[t as usize] & owned != 0) {
+            let value = g.factions[0].treasury;
+            let w2 = w.insecure_clone();
+            env.act(&w2, instruction::Allocate { target: t, amount: value }.data()).unwrap();
+        }
+        env.warp(EPOCH_SECS);
+        let ix = env.admin_ix(instruction::ResolveEpochDebug { randomness: rand32(&mut seed) }.data());
+        env.send(&[ix], &[&admin]).unwrap();
+    }
+
+    // Now anyone may open war 2 (and only war 2).
+    let ix = env.init_ix_after(3, Some(game1));
+    assert!(env.send(&[ix], &[&admin]).is_err());
+    let mut ix = env.init_ix_after(2, Some(game1));
+    ix.accounts[0].pubkey = stranger.pubkey();
+    env.send(&[ix], &[&stranger]).unwrap();
+    let registry = Pubkey::find_program_address(&[REGISTRY_SEED], &samrajya::id()).0;
+    let acc = env.svm.get_account(&registry).unwrap();
+    let r = samrajya::Registry::try_deserialize(&mut &acc.data[..]).unwrap();
+    assert_eq!(r.latest_game, 2);
+}
+
+#[test]
 fn release_binary_rejects_debug_resolver() {
     let mut env = Env::with_binary("samrajya.so");
-    let ix = env.admin_ix(instruction::StartGame {}.data());
+    let ix = env.start_ix(&env.admin.pubkey());
     env.send(&[ix], &[&env.admin.insecure_clone()]).unwrap();
     env.warp(EPOCH_SECS);
     let ix = env.admin_ix(instruction::ResolveEpochDebug { randomness: [1u8; 32] }.data());

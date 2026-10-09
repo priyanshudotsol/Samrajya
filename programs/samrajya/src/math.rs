@@ -16,25 +16,19 @@ pub fn value_of(f: &Faction, shares: u128, generation: u32) -> u64 {
     (shares * f.treasury as u128 / f.total_shares) as u64
 }
 
-/// Adds `lamports` to the treasury and returns the shares minted for them.
+/// Adds `lamports` to the treasury and returns the new member's shares. Every member holds
+/// the same number of shares, so the treasury is split equally per head.
 pub fn mint_shares(f: &mut Faction, lamports: u64) -> u128 {
-    if f.treasury == 0 || f.total_shares == 0 {
-        // Empty (or drained) kingdom: start a fresh share generation so stale shares
+    if f.treasury == 0 && f.total_shares != 0 {
+        // Drained kingdom: start a fresh share generation so the worthless old shares
         // cannot claim part of the new deposit.
-        if f.total_shares != 0 {
-            f.generation += 1;
-            f.members = 0;
-        }
+        f.generation += 1;
+        f.members = 0;
         f.total_shares = 0;
-        let minted = lamports as u128 * INITIAL_SHARES_PER_LAMPORT;
-        f.total_shares = minted;
-        f.treasury += lamports;
-        return minted;
     }
-    let minted = lamports as u128 * f.total_shares / f.treasury as u128;
-    f.total_shares += minted;
+    f.total_shares += SHARES_PER_MEMBER;
     f.treasury += lamports;
-    minted
+    SHARES_PER_MEMBER
 }
 
 /// Burns `shares` and returns the lamports paid out. The fee stays in the treasury,
@@ -54,7 +48,7 @@ pub fn burn_with_fee(f: &mut Faction, shares: u128, generation: u32, fee_bps: u1
 
 pub fn owned_mask(game: &Game, f: usize) -> u8 {
     let mut m = 0u8;
-    for t in 0..N {
+    for t in 0..T {
         if game.territory_owner[t] as usize == f {
             m |= 1 << t;
         }
@@ -80,24 +74,24 @@ pub fn enlist(game: &mut Game, p: &mut Player, faction: u8) -> Result<()> {
     require!((faction as usize) < N, SamrajyaError::InvalidFaction);
     require!(p.pending_deposit > 0, SamrajyaError::NothingToEnlist);
     let fi = faction as usize;
-    let already_here = p.shares > 0 && p.faction == faction && p.generation == game.factions[fi].generation;
-    require!(p.shares == 0 || already_here, SamrajyaError::AlreadyEnlisted);
+    // Shares of a wiped-out kingdom are worth nothing; a fresh ticket replaces them.
+    if p.shares > 0 && p.generation != game.factions[p.faction as usize].generation {
+        p.shares = 0;
+    }
+    require!(p.shares == 0, SamrajyaError::AlreadyEnlisted);
     require!(game.factions[fi].alive, SamrajyaError::FactionEliminated);
 
     let amount = p.pending_deposit;
     let fa = &mut game.factions[fi];
-    let gen_before = fa.generation;
     let minted = mint_shares(fa, amount);
-    if !already_here || fa.generation != gen_before {
-        fa.members += 1;
-        p.shares = 0;
-        p.alloc_target = DEFEND;
-        p.alloc_amount = 0;
-    }
+    fa.members += 1;
     p.faction = faction;
     p.generation = fa.generation;
-    p.shares += minted;
+    p.shares = minted;
     p.pending_deposit = 0;
+    p.alloc_target = DEFEND;
+    p.alloc_amount = 0;
+    crate::field::spawn(p, game, 0);
     Ok(())
 }
 
@@ -110,10 +104,16 @@ pub fn allocate(game: &mut Game, p: &mut Player, target: u8, amount: u64) -> Res
 
     clear_alloc(game, p);
     if target == DEFEND || amount == 0 {
+        // Defend: a warrior standing in a realm its kingdom does not hold comes home.
+        let at = p.unit.at;
+        if at != NO_REALM && p.unit.hp > 0 && game.territory_owner[at as usize] != p.faction {
+            let home = crate::field::home_of(game, p.faction);
+            crate::field::place(p, game, home, 0);
+        }
         return Ok(());
     }
     let t = target as usize;
-    require!(t < N, SamrajyaError::InvalidTerritory);
+    require!(t < T, SamrajyaError::InvalidTerritory);
     require!(game.territory_owner[t] as usize != fi, SamrajyaError::OwnTerritory);
     let fa = game.factions[fi];
     let reach = fa.powers & POWER_VIDYA_REACH != 0;
@@ -124,6 +124,10 @@ pub fn allocate(game: &mut Game, p: &mut Player, target: u8, amount: u64) -> Res
     p.alloc_target = target;
     p.alloc_amount = amount;
     p.alloc_epoch = game.epoch;
+    // The squad assembles at the target's gate (§10.8); the open plains have no realm to stand in.
+    if t < N && p.unit.hp > 0 {
+        crate::field::place(p, game, target, 0);
+    }
     Ok(())
 }
 
@@ -142,6 +146,7 @@ pub fn leave(game: &mut Game, p: &mut Player) -> Result<u64> {
     }
     p.shares = 0;
     p.pending_withdrawal += out;
+    p.unit = Unit { at: NO_REALM, ..Unit::default() };
     Ok(out)
 }
 
@@ -166,12 +171,53 @@ pub fn switch(game: &mut Game, p: &mut Player, to: u8) -> Result<u64> {
     p.faction = to;
     p.generation = dest.generation;
     p.shares = minted;
+    crate::field::spawn(p, game, 0);
     Ok(moved)
+}
+
+/// Any member spends kingdom treasury on the next level of `kind`. The SOL goes to the
+/// plains pot. Returns the cost.
+pub fn upgrade(game: &mut Game, p: &Player, kind: u8) -> Result<u64> {
+    require!(game.phase == Phase::Active, SamrajyaError::WrongPhase);
+    require!(!game.pending_vrf, SamrajyaError::BattlePending);
+    require!((kind as usize) < UPGRADES, SamrajyaError::InvalidConfig);
+    let fi = p.faction as usize;
+    require!(p.shares > 0 && p.generation == game.factions[fi].generation, SamrajyaError::NotEnlisted);
+    let epoch = game.epoch;
+    let fa = &mut game.factions[fi];
+    require!(fa.alive, SamrajyaError::FactionEliminated);
+    let level = fa.upgrades[kind as usize];
+    require!(level < MAX_UPGRADE_LEVEL, SamrajyaError::MaxLevel);
+    require!(fa.upgraded_epoch != epoch, SamrajyaError::UpgradeCooldown);
+    let cost = upgrade_cost(fa, level, game.config.upgrade_cost_bps);
+    require!(cost > 0 && cost <= fa.treasury, SamrajyaError::CannotAfford);
+    fa.treasury -= cost;
+    fa.upgrades[kind as usize] = level + 1;
+    fa.upgraded_epoch = epoch;
+    game.plains_pot += cost;
+    Ok(cost)
+}
+
+/// Price of going from `level` to `level + 1`: `(level + 1) × cost_bps` of the treasury.
+pub fn upgrade_cost(fa: &Faction, level: u8, cost_bps: u16) -> u64 {
+    bps(fa.treasury, (level as u64 + 1) * cost_bps as u64)
 }
 
 pub fn claim(game: &mut Game, p: &mut Player) -> Result<u64> {
     require!(game.phase == Phase::Ended, SamrajyaError::WrongPhase);
     require!(!p.claimed, SamrajyaError::AlreadyClaimed);
+    if game.winner == NEUTRAL {
+        // An aborted war: every member takes back what their share is worth now, plus any
+        // ticket that was never enlisted. Members of eliminated kingdoms get nothing.
+        let fi = p.faction as usize;
+        let value = if p.shares > 0 { burn_with_fee(&mut game.factions[fi], p.shares, p.generation, 0) } else { 0 };
+        let out = value + p.pending_deposit;
+        require!(out > 0, SamrajyaError::NotWinner);
+        p.shares = 0;
+        p.pending_deposit = 0;
+        p.claimed = true;
+        return Ok(out);
+    }
     let w = game.winner as usize;
     require!(p.faction as usize == w && p.shares > 0, SamrajyaError::NotWinner);
     let out = burn_with_fee(&mut game.factions[w], p.shares, p.generation, 0);
@@ -179,6 +225,16 @@ pub fn claim(game: &mut Game, p: &mut Player) -> Result<u64> {
     p.shares = 0;
     p.claimed = true;
     Ok(out)
+}
+
+/// Stops a war for good (authority): it ends with no winner (`NEUTRAL`) and every member can
+/// `claim` their current value back.
+pub fn abort(game: &mut Game) -> Result<()> {
+    require!(game.phase != Phase::Ended, SamrajyaError::WrongPhase);
+    game.phase = Phase::Ended;
+    game.winner = NEUTRAL;
+    game.pending_vrf = false;
+    Ok(())
 }
 
 // ---------------------------------------------------------------- battles
@@ -204,21 +260,21 @@ pub fn sub_roll(randomness: &[u8; 32], territory: usize) -> u64 {
 }
 
 pub fn has_battles(game: &Game) -> bool {
-    (0..N).any(|t| contested(game, t))
+    (0..T).any(|t| contested(game, t))
 }
 
-fn contested(game: &Game, t: usize) -> bool {
+pub fn contested(game: &Game, t: usize) -> bool {
     let owner = game.territory_owner[t] as usize;
     (0..N).any(|f| f != owner && game.factions[f].alive && game.factions[f].attack_alloc[t] > 0)
 }
 
 /// Each kingdom's attack allocations, scaled down if they exceed its treasury.
-fn effective_allocs(game: &Game) -> [[u64; N]; N] {
-    let mut eff = [[0u64; N]; N];
+fn effective_allocs(game: &Game) -> [[u64; T]; N] {
+    let mut eff = [[0u64; T]; N];
     for f in 0..N {
         let fa = &game.factions[f];
         let sum: u128 = fa.attack_alloc.iter().map(|&a| a as u128).sum();
-        for t in 0..N {
+        for t in 0..T {
             eff[f][t] = if sum > fa.treasury as u128 {
                 (fa.attack_alloc[t] as u128 * fa.treasury as u128 / sum) as u64
             } else {
@@ -229,7 +285,16 @@ fn effective_allocs(game: &Game) -> [[u64; N]; N] {
     eff
 }
 
-pub fn attack_power(fa: &Faction, committed: u64) -> u64 {
+/// Multiplier (bps) from held territories beyond the first: a conqueror hits harder.
+pub fn conquest_bps(fa: &Faction, cfg: &GameConfig) -> u64 {
+    BPS + cfg.conquest_bonus_bps as u64 * fa.territories.saturating_sub(1) as u64
+}
+
+pub fn upgrade_bps(fa: &Faction, kind: u8, cfg: &GameConfig) -> u64 {
+    BPS + cfg.upgrade_bonus_bps as u64 * fa.upgrades[kind as usize] as u64
+}
+
+pub fn attack_power(fa: &Faction, committed: u64, cfg: &GameConfig) -> u64 {
     let mut p = committed;
     if fa.powers & POWER_GAJA_SENA != 0 {
         p = bps(p, 12_000);
@@ -237,33 +302,45 @@ pub fn attack_power(fa: &Faction, committed: u64) -> u64 {
     if fa.powers & POWER_RATRI_RAID != 0 && !fa.ambush_used {
         p = bps(p, 15_000);
     }
-    p
+    p = bps(p, upgrade_bps(fa, UPGRADE_ARMORY, cfg));
+    bps(p, conquest_bps(fa, cfg))
 }
 
-pub fn defense_power(fa: &Faction, committed_to_attacks: u64, base_defense: u64) -> u64 {
+pub fn defense_power(fa: &Faction, committed_to_attacks: u64, base_defense: u64, cfg: &GameConfig) -> u64 {
     let free = fa.treasury.saturating_sub(committed_to_attacks);
     let mut d = if fa.territories == 0 { 0 } else { free / fa.territories as u64 };
     if fa.powers & POWER_KURU_FORTRESS != 0 {
         d = bps(d, 13_000);
     }
-    d + base_defense
+    d = bps(d, upgrade_bps(fa, UPGRADE_WALLS, cfg));
+    bps(d, conquest_bps(fa, cfg)) + base_defense
 }
 
-fn move_treasury(game: &mut Game, from: usize, to: usize, amount: u64) -> u64 {
+/// Moves up to `amount` from a kingdom's treasury to `to` (`NEUTRAL` = the plains pot).
+fn move_treasury(game: &mut Game, from: usize, to: u8, amount: u64) -> u64 {
     let amount = amount.min(game.factions[from].treasury);
     game.factions[from].treasury -= amount;
-    game.factions[to].treasury += amount;
+    if to == NEUTRAL {
+        game.plains_pot += amount;
+    } else {
+        game.factions[to as usize].treasury += amount;
+    }
     amount
 }
 
 /// Resolves one territory. Returns the log entry.
-pub fn resolve_battle(game: &mut Game, eff: &[[u64; N]; N], t: usize, rnd: u64) -> Option<BattleEntry> {
-    let d = game.territory_owner[t] as usize;
+///
+/// `verdict` is the hand fight's result for a walled realm (`field::decide_forts`): no roll, the
+/// fort is taken only by the kingdom that cleared it. `None` rolls (the plains, and tests).
+pub fn resolve_battle(game: &mut Game, eff: &[[u64; T]; N], t: usize, rnd: u64, verdict: Option<u8>) -> Option<BattleEntry> {
+    let owner = game.territory_owner[t];
+    let neutral = owner == NEUTRAL;
+    let d = owner as usize;
     let mut attack = [0u64; N];
     let mut mask = 0u8;
     for f in 0..N {
         if f != d && game.factions[f].alive && eff[f][t] > 0 {
-            attack[f] = attack_power(&game.factions[f], eff[f][t]);
+            attack[f] = attack_power(&game.factions[f], eff[f][t], &game.config);
             if attack[f] > 0 {
                 mask |= 1 << f;
             }
@@ -272,27 +349,37 @@ pub fn resolve_battle(game: &mut Game, eff: &[[u64; N]; N], t: usize, rnd: u64) 
     if mask == 0 {
         return None;
     }
-    let committed_by_d: u64 = eff[d].iter().sum();
-    let defense = defense_power(&game.factions[d], committed_by_d, game.base_defense);
+    let defense = if neutral {
+        game.plains_defense.max(1)
+    } else {
+        let committed_by_d: u64 = eff[d].iter().sum();
+        defense_power(&game.factions[d], committed_by_d, game.base_defense, &game.config)
+    };
     let total = defense + attack.iter().sum::<u64>();
-    let roll = rnd % total;
+    let by_fight = verdict.is_some();
+    let roll = if by_fight { 0 } else { rnd % total };
 
-    let mut winner = d;
-    if roll >= defense {
+    let mut winner = owner;
+    if let Some(v) = verdict {
+        if v != owner && (v as usize) < N && mask & (1 << v) != 0 {
+            winner = v;
+        }
+    } else if roll >= defense {
         let mut acc = defense;
         for f in 0..N {
             acc += attack[f];
             if roll < acc {
-                winner = f;
+                winner = f as u8;
                 break;
             }
         }
     }
 
-    // Losing attackers pay k_loss of what they committed to the battle's winner.
+    // Losing attackers pay k_loss of what they committed to the battle's winner
+    // (to the plains pot when the neutral garrison holds).
     let mut spoils = 0u64;
     for f in 0..N {
-        if mask & (1 << f) != 0 && f != winner {
+        if mask & (1 << f) != 0 && f as u8 != winner {
             let mut loss_bps = game.config.k_loss_bps as u64;
             if game.factions[f].powers & POWER_ANNAPURNA_HARVEST != 0 {
                 loss_bps /= 2;
@@ -302,47 +389,57 @@ pub fn resolve_battle(game: &mut Game, eff: &[[u64; N]; N], t: usize, rnd: u64) 
     }
 
     let mut eliminated = false;
-    if winner != d {
-        let loser = game.factions[d];
-        let loot = if loser.territories <= 1 {
-            loser.treasury
-        } else {
-            let mut l = loser.treasury / loser.territories as u64;
-            if game.factions[winner].powers & POWER_SAMUDRA_VYAPAR != 0 {
-                l = bps(l, 12_500);
+    if winner != owner {
+        let w = winner as usize;
+        if !neutral {
+            let loser = game.factions[d];
+            let loot = if loser.territories <= 1 {
+                loser.treasury
+            } else {
+                let mut l = loser.treasury / loser.territories as u64;
+                if game.factions[w].powers & POWER_SAMUDRA_VYAPAR != 0 {
+                    l = bps(l, 12_500);
+                }
+                l
+            };
+            spoils += move_treasury(game, d, winner, loot);
+            game.factions[d].territories -= 1;
+            if game.factions[d].territories == 0 {
+                eliminated = true;
+                let dead = &mut game.factions[d];
+                let powers = dead.powers;
+                let rest = dead.treasury;
+                dead.alive = false;
+                dead.generation += 1;
+                dead.total_shares = 0;
+                dead.members = 0;
+                dead.attack_alloc = [0; T];
+                dead.upgrades = [0; UPGRADES];
+                game.factions[w].powers |= powers;
+                spoils += move_treasury(game, d, winner, rest);
             }
-            l
-        };
-        spoils += move_treasury(game, d, winner, loot);
-        game.territory_owner[t] = winner as u8;
-        game.factions[d].territories -= 1;
-        game.factions[winner].territories += 1;
-        if game.factions[d].territories == 0 {
-            eliminated = true;
-            let dead = &mut game.factions[d];
-            let powers = dead.powers;
-            let rest = dead.treasury;
-            dead.alive = false;
-            dead.generation += 1;
-            dead.total_shares = 0;
-            dead.members = 0;
-            dead.attack_alloc = [0; N];
-            game.factions[winner].powers |= powers;
-            spoils += move_treasury(game, d, winner, rest);
         }
+        game.territory_owner[t] = winner;
+        game.factions[w].territories += 1;
+    }
+
+    // The plains tax: a cut of every kingdom's winnings feeds the plains pot.
+    if winner != NEUTRAL && spoils > 0 {
+        spoils -= move_treasury(game, winner as usize, NEUTRAL, bps(spoils, game.config.plains_tax_bps as u64));
     }
 
     Some(BattleEntry {
         epoch: game.epoch,
         territory: t as u8,
-        defender: d as u8,
-        winner: winner as u8,
+        defender: owner,
+        winner,
         attackers_mask: mask,
         defense,
         total,
         roll,
         spoils,
         eliminated,
+        by_fight,
     })
 }
 
@@ -356,9 +453,12 @@ fn push_log(game: &mut Game, e: BattleEntry) {
 pub fn resolve_epoch(game: &mut Game, randomness: &[u8; 32], now: i64) {
     let eff = effective_allocs(game);
     let mut attacked = [false; N];
-    for t in 0..N {
+    let fight = if game.fight_set { Some(game.fight) } else { None };
+    game.fight_set = false;
+    for t in 0..T {
         let rnd = sub_roll(randomness, t);
-        if let Some(entry) = resolve_battle(game, &eff, t, rnd) {
+        let verdict = fight.filter(|_| t < N).map(|v| v[t]);
+        if let Some(entry) = resolve_battle(game, &eff, t, rnd, verdict) {
             for f in 0..N {
                 if entry.attackers_mask & (1 << f) != 0 {
                     attacked[f] = true;
@@ -371,21 +471,45 @@ pub fn resolve_epoch(game: &mut Game, randomness: &[u8; 32], now: i64) {
         if attacked[f] && game.factions[f].powers & POWER_RATRI_RAID != 0 {
             game.factions[f].ambush_used = true;
         }
-        game.factions[f].attack_alloc = [0; N];
+        game.factions[f].attack_alloc = [0; T];
     }
     advance_epoch(game, now);
 }
 
 pub fn advance_epoch(game: &mut Game, now: i64) {
     game.epoch += 1;
-    game.base_defense = game.base_defense - bps(game.base_defense, game.config.storm_decay_bps as u64);
+    let decay = game.config.storm_decay_bps as u64;
+    game.base_defense -= bps(game.base_defense, decay);
+    game.plains_defense -= bps(game.plains_defense, decay);
     game.epoch_ends_at = now + game.config.epoch_secs;
     game.pending_vrf = false;
+    game.gates = [GATE_HP; N];
+    // The plains pay their holder everything in the pot.
+    let holder = game.territory_owner[PLAINS];
+    if holder != NEUTRAL && game.plains_pot > 0 {
+        game.factions[holder as usize].treasury += game.plains_pot;
+        game.plains_pot = 0;
+    }
     let first = game.territory_owner[0];
-    if game.territory_owner.iter().all(|&o| o == first) {
+    if first != NEUTRAL && game.territory_owner.iter().all(|&o| o == first) {
         game.phase = Phase::Ended;
         game.winner = first;
     }
+}
+
+/// Whether the lobby may be closed by anyone: the timer ran out and two kingdoms have members.
+pub fn lobby_ready(game: &Game, now: i64) -> bool {
+    game.phase == Phase::Lobby && now >= game.epoch_ends_at && game.factions.iter().filter(|f| f.members > 0).count() >= 2
+}
+
+pub fn start(game: &mut Game, now: i64) {
+    game.phase = Phase::Active;
+    game.epoch = 1;
+    game.epoch_ends_at = now + game.config.epoch_secs;
+}
+
+pub fn new_territories() -> [u8; T] {
+    [0, 1, 2, 3, 4, 5, NEUTRAL]
 }
 
 pub fn new_factions() -> [Faction; N] {
@@ -419,11 +543,16 @@ mod tests {
             vrf_requested_at: 0,
             config: GameConfig::default_with(SOL / 20, 60, SOL / 10),
             base_defense: SOL / 10,
-            territory_owner: [0, 1, 2, 3, 4, 5],
+            plains_defense: 3 * SOL / 10,
+            plains_pot: 0,
+            territory_owner: new_territories(),
             factions: new_factions(),
             winner: 0,
             battle_log: [BattleEntry::default(); BATTLE_LOG_LEN],
             battle_count: 0,
+            gates: [GATE_HP; N],
+            fight: [0; T],
+            fight_set: false,
         }
     }
 
@@ -442,6 +571,7 @@ mod tests {
             alloc_amount: 0,
             alloc_epoch: 0,
             claimed: false,
+            unit: Unit { at: NO_REALM, ..Unit::default() },
         }
     }
 
@@ -454,7 +584,7 @@ mod tests {
     }
 
     fn treasury_sum(g: &Game) -> u64 {
-        g.factions.iter().map(|f| f.treasury).sum()
+        g.factions.iter().map(|f| f.treasury).sum::<u64>() + g.plains_pot
     }
 
     /// Shared vector with app/lib/game/math.test.ts — the UI must derive the same rolls.
@@ -472,13 +602,81 @@ mod tests {
     }
 
     #[test]
-    fn shares_are_fair_for_late_joiners() {
+    fn an_aborted_war_refunds_every_member_their_value() {
+        let mut g = game();
+        let mut a = join(&mut g, 0, SOL);
+        let mut b = join(&mut g, 1, SOL);
+        g.factions[0].treasury += SOL / 2; // Hastinapur won a battle
+        g.factions[1].treasury -= SOL / 2;
+        let mut c = player();
+        c.pending_deposit = SOL; // paid, never enlisted
+        assert!(claim(&mut g, &mut a).is_err()); // not over yet
+        abort(&mut g).unwrap();
+        assert!(abort(&mut g).is_err());
+        assert_eq!(g.winner, NEUTRAL);
+        assert_eq!(claim(&mut g, &mut a).unwrap(), 3 * SOL / 2);
+        assert_eq!(claim(&mut g, &mut b).unwrap(), SOL / 2);
+        assert_eq!(claim(&mut g, &mut c).unwrap(), SOL);
+        assert!(claim(&mut g, &mut a).is_err()); // once
+        assert_eq!(g.factions[0].treasury + g.factions[1].treasury, 0);
+    }
+
+    #[test]
+    fn treasury_splits_equally_per_member() {
         let mut g = game();
         let a = join(&mut g, 0, SOL);
         g.factions[0].treasury += SOL; // kingdom doubled via conquest
         let b = join(&mut g, 0, SOL);
-        assert_eq!(value_of(&g.factions[0], a.shares, a.generation), 2 * SOL);
-        assert_eq!(value_of(&g.factions[0], b.shares, b.generation), SOL);
+        assert_eq!(value_of(&g.factions[0], a.shares, a.generation), 3 * SOL / 2);
+        assert_eq!(value_of(&g.factions[0], b.shares, b.generation), 3 * SOL / 2);
+    }
+
+    #[test]
+    fn plains_start_neutral_and_pay_the_pot_to_their_holder() {
+        let mut g = game();
+        let mut a = join(&mut g, 0, 10 * SOL);
+        allocate(&mut g, &mut a, PLAINS as u8, 10 * SOL).unwrap();
+        let eff = effective_allocs(&g);
+        // roll 0 → the garrison holds; the failed attack feeds the pot
+        let e = resolve_battle(&mut g, &eff, PLAINS, 0, None).unwrap();
+        assert_eq!(e.defender, NEUTRAL);
+        assert_eq!(e.winner, NEUTRAL);
+        assert_eq!(g.plains_pot, 2 * SOL);
+        assert_eq!(g.factions[0].treasury, 8 * SOL);
+        // a roll past the garrison takes it; no loot, the kingdom gains a territory
+        let garrison = g.plains_defense;
+        let e = resolve_battle(&mut g, &eff, PLAINS, garrison, None).unwrap();
+        assert_eq!(e.winner, 0);
+        assert_eq!(g.territory_owner[PLAINS], 0);
+        assert_eq!(g.factions[0].territories, 2);
+        advance_epoch(&mut g, 0);
+        assert_eq!(g.plains_pot, 0);
+        assert_eq!(g.factions[0].treasury, 10 * SOL);
+        assert_eq!(g.phase, Phase::Active);
+    }
+
+    #[test]
+    fn upgrades_cost_treasury_and_boost_power() {
+        let mut g = game();
+        let a = join(&mut g, 0, 10 * SOL);
+        let before = attack_power(&g.factions[0], SOL, &g.config);
+        assert_eq!(upgrade(&mut g, &a, UPGRADE_ARMORY).unwrap(), SOL / 2); // 5% of 10
+        assert_eq!(g.plains_pot, SOL / 2);
+        assert_eq!(attack_power(&g.factions[0], SOL, &g.config), before * 115 / 100);
+        assert!(upgrade(&mut g, &a, UPGRADE_WALLS).is_err()); // one per epoch
+        g.epoch += 1;
+        assert_eq!(upgrade(&mut g, &a, UPGRADE_ARMORY).unwrap(), 95 * SOL / 100); // 10% of 9.5
+        assert_eq!(g.factions[0].upgrades[UPGRADE_ARMORY as usize], 2);
+        assert_eq!(treasury_sum(&g), 10 * SOL);
+    }
+
+    #[test]
+    fn each_extra_territory_adds_conquest_power() {
+        let mut g = game();
+        join(&mut g, 0, SOL);
+        let one = attack_power(&g.factions[0], SOL, &g.config);
+        g.factions[0].territories = 3;
+        assert_eq!(attack_power(&g.factions[0], SOL, &g.config), one * 130 / 100);
     }
 
     #[test]
@@ -530,10 +728,10 @@ mod tests {
         let b = join(&mut g, 1, SOL);
         allocate(&mut g, &mut a, 1, 10 * SOL).unwrap();
         let eff = effective_allocs(&g);
-        let defense = defense_power(&g.factions[1], 0, g.base_defense);
+        let defense = defense_power(&g.factions[1], 0, g.base_defense, &g.config);
         assert_eq!(defense, SOL + SOL / 10);
         // roll == defense lands in the first attacker bucket
-        let e = resolve_battle(&mut g, &eff, 1, defense).unwrap();
+        let e = resolve_battle(&mut g, &eff, 1, defense, None).unwrap();
         assert_eq!(e.winner, 0);
         assert!(e.eliminated);
         assert_eq!(e.total, defense + 10 * SOL); // Hastinapur has no attack multiplier
@@ -542,7 +740,7 @@ mod tests {
         assert_eq!(g.factions[0].territories, 2);
         assert_ne!(g.factions[0].powers & POWER_GAJA_SENA, 0);
         assert_eq!(value_of(&g.factions[1], b.shares, b.generation), 0);
-        assert_eq!(g.factions[0].treasury, 11 * SOL);
+        assert_eq!(g.factions[0].treasury, 11 * SOL - SOL / 10); // the plains tax on 1 SOL of loot
         assert_eq!(treasury_sum(&g), 11 * SOL);
     }
 
@@ -553,11 +751,12 @@ mod tests {
         join(&mut g, 1, SOL);
         allocate(&mut g, &mut a, 1, 5 * SOL).unwrap();
         let eff = effective_allocs(&g);
-        let e = resolve_battle(&mut g, &eff, 1, 0).unwrap(); // roll 0 -> defender
+        let e = resolve_battle(&mut g, &eff, 1, 0, None).unwrap(); // roll 0 -> defender
         assert_eq!(e.winner, 1);
-        assert_eq!(e.spoils, SOL); // 20% of 5 SOL
+        assert_eq!(e.spoils, 9 * SOL / 10); // 20% of 5 SOL, less the 10% plains tax
         assert_eq!(g.factions[0].treasury, 9 * SOL);
-        assert_eq!(g.factions[1].treasury, 2 * SOL);
+        assert_eq!(g.factions[1].treasury, 19 * SOL / 10);
+        assert_eq!(g.plains_pot, SOL / 10);
         assert_eq!(g.territory_owner[1], 1);
     }
 
@@ -582,7 +781,7 @@ mod tests {
         assert_eq!(value_of(&g.factions[2], b.shares, b.generation), SOL);
     }
 
-    /// Plays many full games with random players, allocations, leaves and switches.
+    /// Plays many full games with random players, allocations, upgrades, leaves and switches.
     /// Checks the game always ends with one ruler and that no lamport is created or lost.
     #[test]
     fn simulation_conserves_sol_and_ends() {
@@ -596,10 +795,10 @@ mod tests {
             let mut players: Vec<Player> = Vec::new();
             let mut deposited = 0u64;
             let mut paid_out = 0u64;
+            let ticket = g.config.ticket;
             for i in 0..18 {
-                let amt = SOL / 20 + next() % (2 * SOL);
-                players.push(join(&mut g, (i % N) as u8, amt));
-                deposited += amt;
+                players.push(join(&mut g, (i % N) as u8, ticket));
+                deposited += ticket;
             }
             let mut epochs = 0;
             while g.phase == Phase::Active {
@@ -612,9 +811,8 @@ mod tests {
                             // eliminated or left: maybe re-join an alive kingdom
                             let alive: Vec<u8> = (0..N as u8).filter(|&f| g.factions[f as usize].alive).collect();
                             let f = alive[(next() % alive.len() as u64) as usize];
-                            let amt = SOL / 20 + next() % SOL;
-                            p.pending_deposit = amt;
-                            deposited += amt;
+                            p.pending_deposit = ticket;
+                            deposited += ticket;
                             enlist(&mut g, p, f).unwrap();
                         }
                         continue;
@@ -628,8 +826,10 @@ mod tests {
                     } else if r < 5 {
                         let to = (next() % N as u64) as u8;
                         let _ = switch(&mut g, p, to);
+                    } else if r < 8 {
+                        let _ = upgrade(&mut g, p, (next() % UPGRADES as u64) as u8);
                     } else if r < 80 {
-                        let t = (next() % N as u64) as u8;
+                        let t = (next() % T as u64) as u8;
                         let v = value_of(&g.factions[p.faction as usize], p.shares, p.generation);
                         let _ = allocate(&mut g, p, t, v / 2 + 1);
                     }
