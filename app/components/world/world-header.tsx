@@ -10,6 +10,8 @@ import { formatSol, totalPot } from '@/lib/game/math';
 import { useGame } from '@/lib/store/game';
 import { TOUR_STEP_IDS } from '@/lib/tour-constants';
 
+import { WarControl } from './war-control';
+
 /** Header: brand · epoch countdown · total pot · connect wallet. */
 export function WorldHeader() {
   const game = useGame((s) => s.game);
@@ -27,8 +29,8 @@ export function WorldHeader() {
             <span className="text-[10px] tracking-[0.2em] text-text-secondary">EPOCH</span>
             <span className="font-clash text-lg text-text-primary tabular-nums">{game.epoch}</span>
           </div>
-          {game.phase === 'Ended' ? (
-            <div className="text-sm text-text-highlight">War over — a new war begins soon</div>
+          {game.phase !== 'Active' ? (
+            <WarControl compact />
           ) : game.pendingVrf ? (
             <div className="flex items-center gap-2 text-sm text-text-highlight animate-pulse">
               <Hourglass className="h-4 w-4" /> Battles resolving (VRF)…

@@ -17,13 +17,13 @@ import { useGame } from '@/lib/store/game';
 import { TOUR_STEP_IDS } from '@/lib/tour-constants';
 import { SAMRAJYA_TOUR_STEPS } from '@/lib/tour-steps';
 
-// globe.gl touches `window` at import time, so the globe is client-only.
-const WorldGlobe = dynamic(() => import('@/components/world/world-globe').then((m) => m.WorldGlobe), {
+// The world map is a WebGL canvas, so it is client-only.
+const WorldMap = dynamic(() => import('@/components/world/world-map').then((m) => m.WorldMap), {
   ssr: false,
   loading: () => <></>,
 });
 
-/** World screen (IMPLEMENTATION_GUIDE Part B1): globe + kingdoms + war room. */
+/** World screen: the sky archipelago + kingdoms + war room. */
 export default function Home() {
   const router = useRouter();
   const isMobile = useMediaQuery('(max-width: 768px)');
@@ -89,16 +89,8 @@ export default function Home() {
         <WorldHeader />
 
         <div className="relative flex-1 border-x border-b border-border-default bg-background-surface overflow-hidden">
-          {/* subtle royal glow behind the globe */}
-          <div
-            className="pointer-events-none absolute inset-0"
-            style={{
-              background:
-                'radial-gradient(ellipse at 50% 55%, rgba(201,162,39,0.10) 0%, rgba(14,11,8,0) 55%)',
-            }}
-          />
-          <div className="absolute inset-0 flex justify-center items-center">
-            <WorldGlobe />
+          <div className="absolute inset-0">
+            <WorldMap />
           </div>
 
           <Collapsible side="left" width={330}>

@@ -7,7 +7,7 @@ export const AppBackground = ({
 }: PropsWithChildren<{ overflowHidden?: boolean; hasGradient?: boolean }>) => {
   return (
     <div
-      className={`relative h-screen fade-in text-white ${overflowHidden ? 'overflow-hidden' : ''} min-h-screen`}
+      className={`relative h-screen fade-in text-text-primary ${overflowHidden ? 'overflow-hidden' : ''} min-h-screen`}
     >
       {hasGradient && <div className="background-gradient"></div>}
       {children}

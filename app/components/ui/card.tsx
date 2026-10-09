@@ -18,7 +18,7 @@ function Card({ className, orientation = 'left', ...props }: CardProps) {
       <div
         data-slot="card"
         className={cn(
-          'relative text-white flex flex-col gap-6 pt-6 bg-background-panel ',
+          'relative text-text-primary flex flex-col gap-6 pt-6 bg-background-panel ',
           className,
         )}
         style={{

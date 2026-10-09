@@ -26,7 +26,7 @@ function AboutUsCard({ onClick }: { onClick: () => void }) {
       <GameCard
         topRightLabel="About the Game"
         // title="About the Game"
-        description="Six kingdoms. One empire. Pledge SOL to Hastinapur, Magadh, Kalinga, Takshashila, Vijayanagar or Avanti and receive shares of its treasury. Every epoch, defend or march on a neighbour; VRF decides the battles. Flee for 20%, betray for 40%. The last kingdom standing splits the pot."
+        description="Six kingdoms. One empire. Pledge SOL to Hastinapur, Magadh, Kalinga, Takshashila, Vijayanagar or Avanti and receive shares of its treasury. Every epoch, hold your walls or join a squad that teleports to an enemy gate; the fight decides: clear their walls by the bell and the kingdom is yours. Flee for 20%, betray for 40%. The last kingdom standing splits the pot."
         buttons={buttons}
         children={
           <div className="flex flex-col items-center justify-center">

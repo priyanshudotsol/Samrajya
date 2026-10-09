@@ -20,12 +20,12 @@ export const SAMRAJYA_TOUR_STEPS: TourStep[] = [
       <div className="space-y-3">
         <h3 className="text-lg font-semibold">Defend or attack</h3>
         <p className="text-sm text-muted-foreground">
-          Each epoch, put your strength into defending home or attacking a neighbour. Arcs on the
-          globe show live attacks. Click a castle to open its realm.
+          Each epoch, put your strength into defending home or attacking a neighbour. Glowing sky
+          routes between the islands show live attacks. Click an island to open its realm.
         </p>
       </div>
     ),
-    selectorId: TOUR_STEP_IDS.WORLD_GLOBE,
+    selectorId: TOUR_STEP_IDS.WORLD_MAP,
     position: 'top',
   },
   {

@@ -2,8 +2,8 @@
 
 import { Crown, Skull } from 'lucide-react';
 
-import { KINGDOMS, kingdomGlow, powersFromMask } from '@/lib/game/factions';
-import { formatSol, sharePrice, totalPot } from '@/lib/game/math';
+import { KINGDOMS, kingdomInk, powersFromMask } from '@/lib/game/factions';
+import { formatSol, perMember, totalPot } from '@/lib/game/math';
 import { useGame } from '@/lib/store/game';
 import { Card, CardContent, CardHeader } from '../ui/card';
 import { ClipPathBorder } from '../ui/clippath-border';
@@ -37,7 +37,7 @@ export function Leaderboard({ onClick }: { onClick: (kingdomId: number) => void 
           <div className="space-y-3 pb-6 pt-1">
             {rows.map(({ id, f }, rank) => {
               const k = KINGDOMS[id];
-              const glow = kingdomGlow(id);
+              const glow = kingdomInk(id);
               const share = pot === 0n ? 0 : Number((f.treasury * 1000n) / pot) / 10;
               const isMine = me?.faction === id && me.status === 'Active';
               return (
@@ -82,8 +82,8 @@ export function Leaderboard({ onClick }: { onClick: (kingdomId: number) => void 
                         <span>
                           {f.territories} terr · {f.members} members
                         </span>
-                        <span title="Share price (1.000 at launch)">
-                          share {f.alive ? sharePrice(f).toFixed(3) : '0.000'}
+                        <span title="Each member's equal share of the treasury">
+                          ◎ {f.alive ? formatSol(perMember(f), 3) : '0.000'} each
                         </span>
                       </div>
                       <div className="h-1 w-full bg-background-tertiary">

@@ -1,5 +1,6 @@
 'use client';
 
+import { WarControl } from '@/components/world/war-control';
 import { TeamWinData } from '@/lib/hooks/use-team-win-detection';
 import { TeamWinHeader } from './team-win-header';
 import { TeamWinStats } from './team-win-stats';
@@ -26,6 +27,9 @@ export function TeamWinCelebration({ teamWinData }: TeamWinCelebrationProps) {
         <TeamWinStats teamWinData={teamWinData} />
         <TeamWinMessage teamWinData={teamWinData} />
         <TeamWinEliminatedTeams teamWinData={teamWinData} />
+        <div className="mt-4 flex justify-center">
+          <WarControl />
+        </div>
       </div>
     </div>
   );

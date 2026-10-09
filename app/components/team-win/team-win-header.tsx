@@ -2,7 +2,7 @@
 
 import { Trophy, Crown } from 'lucide-react';
 
-import { KINGDOMS, kingdomGlow } from '@/lib/game/factions';
+import { KINGDOMS, kingdomInk } from '@/lib/game/factions';
 import { TeamWinData } from '@/lib/hooks/use-team-win-detection';
 
 interface TeamWinHeaderProps {
@@ -42,7 +42,7 @@ export function TeamWinHeader({ teamWinData }: TeamWinHeaderProps) {
         <div className="flex h-8 w-8 sm:h-9 sm:w-9 md:h-10 md:w-10 items-center justify-center rounded-full bg-background-surface/20">
           <div
             className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 rounded-full flex items-center justify-center text-background-panel font-bold text-xs"
-            style={{ backgroundColor: kingdomGlow(kingdom.id) }}
+            style={{ backgroundColor: kingdomInk(kingdom.id) }}
           >
             {teamName.charAt(0)}
           </div>

@@ -2,33 +2,34 @@
 @import 'tw-animate-css';
 
 @theme inline {
-  /* Samrajya dark royal theme (docs/KINGDOM_UI.md §2): near-black panels, #C9A227 gold hairlines */
-  --color-background: #0e0b08;
-  --color-background-surface: #080605;
-  --color-background-panel: #120e0a;
-  --color-background-tertiary: #1b150e;
-  --color-background-quaternary: #241c12;
-  --color-background-muted: #2e2416;
+  /* Samrajya "royal night" theme: deep ink panels, gold-leaf hairlines, ivory text. Dark so the
+     HUD frames the bright 3D world instead of blending into a light page (2026-10-09). */
+  --color-background: #120d0a;
+  --color-background-surface: #1a130e;
+  --color-background-panel: #1f1711;
+  --color-background-tertiary: #2a1f16;
+  --color-background-quaternary: #33261a;
+  --color-background-muted: #3d2e20;
 
-  --color-border-default: #3a2e17;
+  --color-border-default: #4a3820;
   --color-border-active: #c9a227;
-  --color-border-secondary: #8c7124;
-  --color-border-muted: #2e2412;
-  --color-border-tertiary: #5a4718;
+  --color-border-secondary: #a8842e;
+  --color-border-muted: #33271a;
+  --color-border-tertiary: #6b5228;
 
-  --color-text-primary: #f5ebd7;
-  --color-text-secondary: #b8a887;
-  --color-text-inverse: #120d06;
-  --color-text-highlight: #e3c15a;
+  --color-text-primary: #f3e7cf;
+  --color-text-secondary: #b8a589;
+  --color-text-inverse: #1a1008;
+  --color-text-highlight: #e3bd5a;
 
-  --color-button-highlight: #c9a227;
-  --color-button-secondary: #120d06;
-  --color-button-muted: #2a2114;
+  --color-button-highlight: #d9a93a;
+  --color-button-secondary: #2a1f16;
+  --color-button-muted: #33261a;
 
-  --color-slider-track: #241b0e;
+  --color-slider-track: #3d2e20;
 
   --color-gold: #c9a227;
-  --color-vermilion: #e2483c;
+  --color-vermilion: #e2574a;
 
   --font-afacad: var(--font-afacad);
   --font-clash: var(--font-clash);
@@ -36,22 +37,22 @@
   --font-yatra: var(--font-yatra);
   --font-tiro: var(--font-tiro);
 
-  --color-foreground: oklch(0.985 0 0);
-  --color-card: oklch(0.21 0.006 285.885);
-  --color-card-foreground: oklch(0.985 0 0);
-  --color-popover: oklch(0.21 0.006 285.885);
-  --color-popover-foreground: oklch(0.985 0 0);
-  --color-primary: oklch(0.92 0.004 286.32);
-  --color-primary-foreground: oklch(0.21 0.006 285.885);
-  --color-secondary: oklch(0.274 0.006 286.033);
-  --color-secondary-foreground: oklch(0.985 0 0);
-  --color-muted: oklch(0.274 0.006 286.033);
-  --color-muted-foreground: oklch(0.705 0.015 286.067);
-  --color-accent: oklch(0.274 0.006 286.033);
-  --color-accent-foreground: oklch(0.985 0 0);
+  --color-foreground: #f3e7cf;
+  --color-card: #1f1711;
+  --color-card-foreground: #f3e7cf;
+  --color-popover: #1f1711;
+  --color-popover-foreground: #f3e7cf;
+  --color-primary: #e3bd5a;
+  --color-primary-foreground: #1a1008;
+  --color-secondary: #2a1f16;
+  --color-secondary-foreground: #f3e7cf;
+  --color-muted: #2a1f16;
+  --color-muted-foreground: #b8a589;
+  --color-accent: #33261a;
+  --color-accent-foreground: #f3e7cf;
   --color-destructive: oklch(0.704 0.191 22.216);
-  --color-border: oklch(1 0 0 / 10%);
-  --color-input: oklch(1 0 0 / 15%);
+  --color-border: #4a3820;
+  --color-input: #4a3820;
   --color-ring: oklch(0.552 0.016 285.938);
   --color-chart-1: oklch(0.488 0.243 264.376);
   --color-chart-2: oklch(0.696 0.17 162.48);
@@ -201,7 +202,7 @@
   left: calc(50% - 946px / 2 + 1px);
   top: -651px;
 
-  background: rgba(201, 162, 39, 0.35);
+  background: rgba(201, 162, 39, 0.22);
   filter: blur(100px);
 }
 
@@ -264,11 +265,11 @@
 
 .gold-hairline {
   border: 1px solid rgba(201, 162, 39, 0.55);
-  box-shadow: inset 0 0 0 1px rgba(201, 162, 39, 0.08), 0 0 24px rgba(0, 0, 0, 0.6);
+  box-shadow: inset 0 0 0 1px rgba(201, 162, 39, 0.12), 0 8px 24px rgba(0, 0, 0, 0.45);
 }
 
 .text-gold-gradient {
-  background: linear-gradient(180deg, #f6e3a1 0%, #c9a227 55%, #8c6a14 100%);
+  background: linear-gradient(180deg, #f3d27a 0%, #d9a93a 60%, #a8742a 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -288,6 +289,17 @@
 .wallet-adapter-modal-list .wallet-adapter-button {
   font-family: var(--font-afacad), sans-serif !important;
 }
+.wallet-adapter-modal-wrapper,
+.wallet-adapter-modal-list .wallet-adapter-button,
+.wallet-adapter-modal-list-more {
+  color: var(--color-text-primary) !important;
+}
+.wallet-adapter-modal-button-close {
+  background: var(--color-background-tertiary) !important;
+}
+.wallet-adapter-modal-button-close svg {
+  fill: var(--color-text-secondary) !important;
+}
 .wallet-adapter-modal-list .wallet-adapter-button:hover {
   background: var(--color-background-muted) !important;
 }
@@ -297,7 +309,7 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-primary;
+    @apply bg-background text-text-primary;
   }
 }
 

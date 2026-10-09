@@ -2,7 +2,7 @@
 
 import { X } from 'lucide-react';
 
-import { KINGDOMS, kingdomGlow } from '@/lib/game/factions';
+import { KINGDOMS, kingdomInk } from '@/lib/game/factions';
 import { TeamWinData } from '@/lib/hooks/use-team-win-detection';
 
 interface TeamWinEliminatedTeamsProps {
@@ -48,7 +48,7 @@ export function TeamWinEliminatedTeams({ teamWinData }: TeamWinEliminatedTeamsPr
   const eliminatedTeams = teamWinData.eliminated.map((id) => ({
     id,
     name: KINGDOMS[id].name,
-    color: kingdomGlow(id),
+    color: kingdomInk(id),
   }));
 
   const allEliminatedTeams = [...eliminatedTeams];

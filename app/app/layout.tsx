@@ -11,6 +11,7 @@ import {
   TeamWinProvider,
   OnboardingProvider,
 } from '@/lib/providers';
+import { ChainActivity } from '@/components/chain/ChainActivity';
 import { ModalRegistry } from '@/components/modals';
 import { Toaster } from '@/components/ui/sonner';
 
@@ -75,7 +76,7 @@ const clashGrotesk = localFont({
 
 export const metadata: Metadata = {
   title: 'Samrajya — साम्राज्य',
-  description: 'A real-time, on-chain war for the globe on MagicBlock Ephemeral Rollups.',
+  description: 'A real-time, on-chain war for the empire on MagicBlock Ephemeral Rollups.',
 };
 
 export default function RootLayout({
@@ -95,6 +96,7 @@ export default function RootLayout({
                 <ToastProvider>
                   <OnboardingProvider>
                     {children}
+                    <ChainActivity />
                     <ModalRegistry />
                     <Toaster theme="dark" />
                   </OnboardingProvider>

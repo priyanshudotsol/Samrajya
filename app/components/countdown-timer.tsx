@@ -53,7 +53,7 @@ export function CountdownTimer({
       <div className="flex items-center gap-2">
         <AccentIcon color="var(--color-text-highlight)" />
         {timeLeft === 0 ? (
-          <div className="text-sm text-gray-400 text-nowrap">{endedLabel}</div>
+          <div className="text-sm text-text-highlight text-nowrap">{endedLabel}</div>
         ) : (
           <div className="font-clash font-medium text-text-primary text-lg tabular-nums">
             {formatTime(timeLeft)}

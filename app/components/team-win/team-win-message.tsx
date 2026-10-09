@@ -68,7 +68,7 @@ export function TeamWinMessage({ teamWinData }: TeamWinMessageProps) {
       <div className="text-center mb-6">
         <p className="text-text-secondary text-base">
           <span className="font-bold text-text-highlight">{teamName}</span> now holds every territory.
-          Its members split the entire pot by shares. A new war begins shortly.
+          Its members split the entire pot equally. Anyone can open the next war below.
         </p>
       </div>
     </>

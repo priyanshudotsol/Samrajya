@@ -10,6 +10,7 @@ import { LogoLoader } from '@/components/loader/logo-loader';
 import { ActionsProvider } from '@/components/realm-hud/actions-context';
 import { RealmHud } from '@/components/realm-hud/RealmHud';
 import { findEntry, useBattle } from '@/lib/arena/battleMachine';
+import { control } from '@/lib/arena/controller';
 import { useBattleDriver } from '@/lib/arena/useBattleDriver';
 import { KINGDOMS } from '@/lib/game/factions';
 import { useMediaQuery } from '@/lib/hooks/use-media-query';
@@ -51,7 +52,10 @@ export default function KingdomPage() {
   // Esc → back to the world map.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !document.querySelector('[role="alertdialog"]')) router.push('/');
+      if (e.key !== 'Escape' || document.querySelector('[role="alertdialog"]')) return;
+      // Esc first cancels a walk / attack order (lib/arena/controller.ts), then leaves the realm
+      if (control.target || control.goal || performance.now() - control.escAt < 150) return;
+      router.push('/');
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
