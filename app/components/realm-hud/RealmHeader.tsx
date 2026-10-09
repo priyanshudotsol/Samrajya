@@ -5,7 +5,8 @@ import { ArrowLeft, Sun } from 'lucide-react';
 
 import { CountdownTimer } from '@/components/countdown-timer';
 import { ConnectWalletButton } from '@/components/wallet';
-import { KINGDOMS, kingdomGlow, powersFromMask } from '@/lib/game/factions';
+import { WarControl } from '@/components/world/war-control';
+import { KINGDOMS, kingdomInk, powersFromMask } from '@/lib/game/factions';
 import { useGame } from '@/lib/store/game';
 
 import { useNow } from './kit';
@@ -42,12 +43,12 @@ export function RealmHeader({ territory, compact = false }: { territory: number;
         <ArrowLeft className="h-4 w-4" /> World
       </Link>
       <div className="flex items-baseline gap-2">
-        <h1 className="font-rozha text-2xl leading-none md:text-3xl" style={{ color: kingdomGlow(owner) }}>
-          {k.name.toUpperCase()}
+        <h1 className="font-rozha text-2xl leading-none md:text-3xl" style={{ color: kingdomInk(owner) }}>
+          {KINGDOMS[owner].name.toUpperCase()}
         </h1>
         {owner !== territory && (
           <span className="text-xs text-text-secondary">
-            held by <span style={{ color: kingdomGlow(owner) }}>{KINGDOMS[owner].name}</span>
+            conquered <span style={{ color: kingdomInk(territory) }}>{k.name}</span>
           </span>
         )}
       </div>
@@ -71,7 +72,7 @@ export function RealmHeader({ territory, compact = false }: { territory: number;
           />
         )}
         {game.pendingVrf && <span className="animate-pulse text-sm text-text-highlight">Battles resolving…</span>}
-        {game.phase === 'Ended' && <span className="text-sm text-text-highlight">The war is over</span>}
+        {game.phase === 'Ended' && <WarControl compact />}
         {!compact && <SunDial progress={progress} red={game.phase === 'Active' && (remaining <= 10 || game.pendingVrf)} />}
         <ConnectWalletButton />
       </div>

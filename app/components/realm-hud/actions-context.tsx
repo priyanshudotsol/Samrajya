@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, type ReactNode } from 'react';
 import { toast } from 'sonner';
 
 import { useGameActions, type GameActions } from '@/lib/actions';
-import { play } from '@/lib/audio';
+import { play, playSfx } from '@/lib/audio';
 
 type Run = <K extends Exclude<keyof GameActions, 'ringBell'>>(
   name: K,
@@ -36,7 +36,9 @@ export function ActionsProvider({ children }: { children: ReactNode }) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         await (actions[name] as (...a: any[]) => Promise<void>)(...args);
         if (success) toast.success(success);
-        play('horn');
+        // a war horn for the big moves only, not every button
+        if (name === 'pledge' || name === 'march' || name === 'startWar') playSfx('warhorn', { volume: 0.7 });
+        else play('click');
         return true;
       } catch (e) {
         toast.error(e instanceof Error ? e.message : String(e));

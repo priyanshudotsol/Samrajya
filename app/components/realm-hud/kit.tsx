@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 import type { Game, Player } from '@/lib/game/types';
 import { valueOf } from '@/lib/game/math';
 
-/** Dark royal panel: #0E0B08-ish fill, gold hairline, jaali pattern (KINGDOM_UI §2). */
+/** Parchment panel: ivory fill, gold hairline, jaali pattern (KINGDOM_UI §2). */
 export function Panel({
   title,
   icon,

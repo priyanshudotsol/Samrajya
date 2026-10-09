@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { Play, ScrollText } from 'lucide-react';
 
 import { useBattle } from '@/lib/arena/battleMachine';
-import { KINGDOMS, kingdomGlow } from '@/lib/game/factions';
+import { kingdomInk, territoryShort, ownerShort } from '@/lib/game/factions';
 import type { BattleEntry } from '@/lib/game/types';
 import { useGame } from '@/lib/store/game';
 
@@ -46,19 +46,19 @@ export function BattleLog({ territory }: { territory: number }) {
               className="group flex w-full items-center justify-between gap-2 px-1 py-0.5 text-left text-sm hover:bg-background-quaternary"
             >
               <span className="flex items-center gap-1.5 text-text-secondary">
-                <Play className="h-3 w-3 opacity-40 group-hover:opacity-100" />E{e.epoch} {KINGDOMS[e.territory].short}
+                <Play className="h-3 w-3 opacity-40 group-hover:opacity-100" />E{e.epoch} {territoryShort(e.territory)}
               </span>
               <span>
                 {held ? (
                   <>
-                    <span style={{ color: kingdomGlow(e.defender) }}>{KINGDOMS[e.defender].short}</span>{' '}
+                    <span style={{ color: kingdomInk(e.defender) }}>{ownerShort(e.defender)}</span>{' '}
                     <span className="text-text-highlight">held</span>
                   </>
                 ) : (
                   <>
-                    <span style={{ color: kingdomGlow(e.winner) }}>{KINGDOMS[e.winner].short}</span>{' '}
+                    <span style={{ color: kingdomInk(e.winner) }}>{ownerShort(e.winner)}</span>{' '}
                     <span className="text-[var(--color-vermilion)]">✕</span>{' '}
-                    <span style={{ color: kingdomGlow(e.defender) }}>{KINGDOMS[e.defender].short}</span>
+                    <span style={{ color: kingdomInk(e.defender) }}>{ownerShort(e.defender)}</span>
                   </>
                 )}
               </span>

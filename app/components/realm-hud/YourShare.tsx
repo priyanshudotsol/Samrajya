@@ -14,7 +14,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
-import { KINGDOMS, kingdomGlow } from '@/lib/game/factions';
+import { KINGDOMS, kingdomInk } from '@/lib/game/factions';
 import { formatSol, leaveFee, previewLeave, previewSwitch, switchFee } from '@/lib/game/math';
 import { useGame } from '@/lib/store/game';
 
@@ -63,7 +63,7 @@ export function YourShare() {
     >
       <div className="flex items-baseline justify-between text-sm">
         <span className="text-text-secondary">
-          Value in <span style={{ color: kingdomGlow(mem.faction) }}>{KINGDOMS[mem.faction].short}</span>
+          Value in <span style={{ color: kingdomInk(mem.faction) }}>{KINGDOMS[mem.faction].short}</span>
         </span>
         <span className="font-semibold tabular-nums text-text-primary">{formatSol(value, 3)} ◎</span>
       </div>
@@ -73,7 +73,7 @@ export function YourShare() {
       </div>
 
       {lostRecently && !ended && (
-        <div className="mt-2 border border-[var(--color-vermilion)]/60 bg-[#2a0d0a]/60 p-2 text-xs">
+        <div className="mt-2 border border-[var(--color-vermilion)]/60 bg-[var(--color-vermilion)]/10 p-2 text-xs">
           <div className="font-rozha text-sm text-[var(--color-vermilion)]">Flee the realm?</div>
           Your kingdom just lost a territory. Leaving now keeps <b className="tabular-nums">{formatSol(leave.payout, 3)} ◎</b>.
         </div>
@@ -136,7 +136,7 @@ export function YourShare() {
                 onClick={() => setSwitchTo(i)}
                 className={`border px-2 py-1.5 text-left text-sm ${switchTo === i ? 'border-border-active bg-background-quaternary' : 'border-border-default'}`}
               >
-                <span className="font-rozha" style={{ color: kingdomGlow(i) }}>
+                <span className="font-rozha" style={{ color: kingdomInk(i) }}>
                   {KINGDOMS[i].name}
                 </span>
                 <span className="block text-[11px] text-text-secondary">

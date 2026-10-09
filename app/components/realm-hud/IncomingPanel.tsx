@@ -2,7 +2,7 @@
 
 import { AlertTriangle, Swords } from 'lucide-react';
 
-import { KINGDOMS, kingdomGlow } from '@/lib/game/factions';
+import { KINGDOMS, kingdomInk, territoryName } from '@/lib/game/factions';
 import { attackPower, effectiveAllocs, formatSol } from '@/lib/game/math';
 import { useRealmUi } from '@/lib/realm/ui-store';
 import { useGame } from '@/lib/store/game';
@@ -37,7 +37,7 @@ export function IncomingPanel({ territory }: { territory: number }) {
               onClick={() => setFocus({ kind: 'camp', faction: x.i })}
               className={`flex w-full items-center justify-between text-left text-sm ${focus?.kind === 'camp' && focus.faction === x.i ? 'underline' : ''}`}
             >
-              <span style={{ color: kingdomGlow(x.i) }}>{KINGDOMS[x.i].name}</span>
+              <span style={{ color: kingdomInk(x.i) }}>{KINGDOMS[x.i].name}</span>
               <span className="tabular-nums" title="committed SOL (attack power incl. powers)">
                 ◎ {formatSol(x.amount)}{' '}
                 <span className="text-xs text-text-secondary">⚔ {formatSol(attackPower(game, x.i, territory))}</span>
@@ -54,7 +54,7 @@ export function IncomingPanel({ territory }: { territory: number }) {
       ) : (
         outgoing.map((x) => (
           <div key={x.t} className="flex justify-between text-sm">
-            <span style={{ color: kingdomGlow(game.territoryOwner[x.t]) }}>→ {KINGDOMS[x.t].name}</span>
+            <span style={{ color: kingdomInk(game.territoryOwner[x.t]) }}>→ {territoryName(x.t)}</span>
             <span className="tabular-nums">◎ {formatSol(x.amount)}</span>
           </div>
         ))

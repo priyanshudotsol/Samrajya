@@ -5,9 +5,10 @@ import { Shield, Swords } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
-import { KINGDOMS, kingdomGlow } from '@/lib/game/factions';
+import { useTactical, useTactics } from '@/lib/arena/useTactics';
+import { KINGDOMS, kingdomInk, territoryName, ownerShort } from '@/lib/game/factions';
 import { battleOdds, cloneGame, formatSol, isContested, validTargets } from '@/lib/game/math';
-import { DEFEND, type Game, type Player } from '@/lib/game/types';
+import { DEFEND, N_KINGDOMS, PLAINS, type Game, type Player } from '@/lib/game/types';
 import { useRealmUi } from '@/lib/realm/ui-store';
 import { useGame } from '@/lib/store/game';
 
@@ -32,8 +33,12 @@ const MSOL = 1_000_000n; // slider unit: 0.001 SOL
 export function WarRoom({ territory }: { territory: number }) {
   const game = useGame((s) => s.game);
   const me = useGame((s) => s.me);
+  const players = useGame((s) => s.players);
   const focus = useRealmUi((s) => s.focus);
   const { run, busy, stepLabel } = useHudActions();
+  const tactics = useTactics(territory);
+  // warriors tracked → walled realms are decided by the fight, not dice (§10.8)
+  const byFight = useTactical();
   const mem = liveMembership(game, me);
   const myF = mem?.faction ?? null;
   const targets = useMemo(() => (game && myF !== null ? validTargets(game, myF) : []), [game, myF]);
@@ -84,11 +89,16 @@ export function WarRoom({ territory }: { territory: number }) {
       return { kind: 'defend' as const, rows };
     }
     const amount = BigInt(amountM) * MSOL;
-    const o = battleOdds(base, choice, { faction: myF, amount });
+    const o = battleOdds(base, choice, { faction: myF, amount }, choice === territory ? tactics : null);
     return { kind: 'attack' as const, p: o.pWin[myF], defend: o.pDefend, odds: o };
-  }, [game, me, myF, choice, amountM]);
+  }, [game, me, myF, choice, amountM, tactics, territory]);
 
   if (!game) return null;
+  // The squad: members of your kingdom with orders on the chosen target this epoch.
+  const squad =
+    myF === null || choice === DEFEND
+      ? 0
+      : players.filter((p) => p.status === 'Active' && p.faction === myF && p.allocEpoch === game.epoch && p.allocTarget === choice).length;
   const highlight = focus?.kind === 'defend' || focus?.kind === 'attack';
 
   if (!mem || myF === null) {
@@ -106,7 +116,11 @@ export function WarRoom({ territory }: { territory: number }) {
     const ok = await run(
       'allocate',
       [choice, lamports],
-      choice === DEFEND ? 'Your strength defends home' : `Marching on ${KINGDOMS[choice].name} with ${formatSol(lamports)} ◎`,
+      choice === DEFEND
+        ? 'Your strength defends home'
+        : choice < N_KINGDOMS
+          ? `Your warrior joins the assault at the gate of ${territoryName(choice)} (${formatSol(lamports)} ◎)`
+          : `Marching on ${territoryName(choice)} with ${formatSol(lamports)} ◎`,
     );
     if (ok) setTouched(false);
   };
@@ -123,8 +137,8 @@ export function WarRoom({ territory }: { territory: number }) {
         {current === DEFEND ? (
           <span className="text-text-primary">Defend</span>
         ) : (
-          <span style={{ color: kingdomGlow(game.territoryOwner[current]) }}>
-            Attack {KINGDOMS[current].name} · {formatSol(me!.allocAmount)} ◎
+          <span style={{ color: kingdomInk(game.territoryOwner[current]) }}>
+            Attack {territoryName(current)} · {formatSol(me!.allocAmount)} ◎
           </span>
         )}
         {readOnly && <span className="ml-1">(spectating — not adjacent)</span>}
@@ -136,9 +150,9 @@ export function WarRoom({ territory }: { territory: number }) {
         {targets.map((t) => (
           <Radio key={t} checked={choice === t} onSelect={() => (setChoice(t), setTouched(true))}>
             <Swords className="h-3.5 w-3.5" /> Attack{' '}
-            <span style={{ color: kingdomGlow(game.territoryOwner[t]) }}>{KINGDOMS[t].name}</span>
+            <span style={{ color: kingdomInk(game.territoryOwner[t]) }}>{territoryName(t)}</span>
             {game.territoryOwner[t] !== t && (
-              <span className="text-[10px] text-text-secondary">({KINGDOMS[game.territoryOwner[t]].short})</span>
+              <span className="text-[10px] text-text-secondary">({ownerShort(game.territoryOwner[t])})</span>
             )}
           </Radio>
         ))}
@@ -151,13 +165,36 @@ export function WarRoom({ territory }: { territory: number }) {
             <span className="tabular-nums text-text-primary">{(amountM / 1000).toFixed(3)} ◎</span>
           </div>
           <Slider min={0} max={Math.max(maxM, 1)} step={1} value={[Math.min(amountM, maxM)]} onValueChange={([v]) => setAmountM(v)} disabled={locked} />
+          <p className="text-[11px] text-text-secondary">
+            {choice < N_KINGDOMS
+              ? `Commit and your warrior is teleported to ${territoryName(choice)}'s gate with the squad${squad ? ` (${squad} of yours ordered there)` : ''}. The fight decides: clear the walls before the bell and it is yours.`
+              : 'The open plains are taken with committed strength alone.'}
+          </p>
         </div>
       )}
 
-      {preview?.kind === 'attack' && (
+      {preview?.kind === 'attack' && byFight && choice !== PLAINS ? (
+        <div className="mt-2 text-sm">
+          {!tactics || choice !== territory ? (
+            <span>No dice: your squad must clear {territoryName(choice)}&apos;s walls and hold its gate at the bell.</span>
+          ) : tactics.capturedBy === myF ? (
+            <span className="font-semibold text-text-highlight">Fort cleared: it is yours at the bell if you hold the gate.</span>
+          ) : (
+            <span>
+              No dice: kill or drive out the <span className="font-semibold tabular-nums">{tactics.heads.defendersInside}</span> defender
+              {tactics.heads.defendersInside === 1 ? '' : 's'} inside the walls and stand at the gate when the bell rings.
+            </span>
+          )}
+        </div>
+      ) : preview?.kind === 'attack' && (
         <div className="mt-2 text-sm">
           Win odds <span className="font-semibold tabular-nums text-text-highlight">{pct(preview.p, 1)}</span>
           <span className="text-xs text-text-secondary"> · defender holds {pct(preview.defend, 1)}</span>
+          {tactics && choice === territory && (
+            <div className="text-[11px] text-text-secondary">
+              Tactics: your warriors here ×{(Number(tactics.attackBps[myF]) / 10000).toFixed(2)}, their garrison ×{(Number(tactics.defenseBps) / 10000).toFixed(2)}. March your sainik here to raise it.
+            </div>
+          )}
         </div>
       )}
       {preview?.kind === 'defend' && (
@@ -167,7 +204,7 @@ export function WarRoom({ territory }: { territory: number }) {
           ) : (
             preview.rows.map((r) => (
               <div key={r.t} className="flex justify-between">
-                <span>Hold {KINGDOMS[r.t].name}</span>
+                <span>Hold {territoryName(r.t)}</span>
                 <span className="tabular-nums text-text-highlight">{pct(r.p, 1)}</span>
               </div>
             ))

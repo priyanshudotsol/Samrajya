@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Crown, TrendingDown, TrendingUp } from 'lucide-react';
 
-import { KINGDOMS, kingdomGlow, POWERS } from '@/lib/game/factions';
-import { lamportsToSol, sharePrice, validTargets } from '@/lib/game/math';
+import { KINGDOMS, kingdomInk, POWERS, territoryShort } from '@/lib/game/factions';
+import { conquestBps, lamportsToSol, perMember, validTargets } from '@/lib/game/math';
 import { useRealmUi } from '@/lib/realm/ui-store';
 import { useGame } from '@/lib/store/game';
 
@@ -18,7 +18,7 @@ export function KingdomStats({ territory }: { territory: number }) {
   const [trend, setTrend] = useState<0 | 1 | -1>(0);
   const owner = game?.territoryOwner[territory] ?? territory;
   const f = game?.factions[owner];
-  const price = f && f.alive ? sharePrice(f) : 0;
+  const price = f && f.alive ? lamportsToSol(perMember(f)) : 0;
 
   useEffect(() => {
     if (prevPrice.current !== null && Math.abs(price - prevPrice.current) > 1e-6) setTrend(price > prevPrice.current ? 1 : -1);
@@ -32,26 +32,31 @@ export function KingdomStats({ territory }: { territory: number }) {
   return (
     <Panel title="Kingdom" icon={<Crown className="h-3.5 w-3.5" />} highlight={focus?.kind === 'treasury'}>
       <p className="mb-2 text-xs text-text-secondary">
-        <span style={{ color: kingdomGlow(owner) }}>{k.name}</span> · {k.epithet} · {KINGDOMS[territory].biome}
+        <span style={{ color: kingdomInk(owner) }}>{k.name}</span> · {k.epithet} · {KINGDOMS[territory].biome}
       </p>
       <div className="space-y-1">
         <Stat label="Treasury (strength)">
           <AnimatedNumber value={lamportsToSol(f.treasury)} suffix=" ◎" />
         </Stat>
-        <Stat label="Share price" title="treasury ÷ shares, 1.000 at launch">
+        <Stat label="Each member's share" title="treasury ÷ members: everyone's share is equal">
           <span className="inline-flex items-center gap-1">
-            <AnimatedNumber value={price} digits={3} />
+            <AnimatedNumber value={price} digits={3} suffix=" ◎" />
             {trend === 1 && <TrendingUp className="h-3.5 w-3.5 text-[#4CC27A]" />}
             {trend === -1 && <TrendingDown className="h-3.5 w-3.5 text-[var(--color-vermilion)]" />}
           </span>
         </Stat>
         <Stat label="Members">{f.members}</Stat>
         <Stat label="Territories">
-          {owned.length} <span className="text-text-secondary">({owned.map((t) => KINGDOMS[t].short).join(', ')})</span>
+          {owned.length} <span className="text-text-secondary">({owned.map((t) => territoryShort(t)).join(', ')})</span>
         </Stat>
+        {owned.length > 1 && (
+          <Stat label="Conquest might" title="attack and defense bonus for every territory held beyond the first">
+            ×{(Number(conquestBps(f, game.config)) / 10_000).toFixed(2)}
+          </Stat>
+        )}
         <Stat label="Can attack">
           {validTargets(game, owner)
-            .map((t) => KINGDOMS[t].short)
+            .map((t) => territoryShort(t))
             .join(', ') || '—'}
         </Stat>
         {!f.alive && <div className="text-sm text-[var(--color-vermilion)]">Eliminated — shares are worth 0.</div>}
