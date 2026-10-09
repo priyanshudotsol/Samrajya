@@ -10,6 +10,15 @@
  */
 
 export const N_KINGDOMS = 6;
+/** The six homelands plus the central plains. */
+export const N_TERRITORIES = 7;
+/** Territory index of the central plains (neutral at the start, borders every homeland). */
+export const PLAINS = 6;
+/** `territoryOwner` value for a territory nobody holds (the plains before they fall). */
+export const NEUTRAL = 255;
+/** Kingdom upgrades bought with treasury; `Faction.upgrades[kind]` is the level. */
+export const UPGRADE = { WALLS: 0, ARMORY: 1 } as const;
+export const MAX_UPGRADE_LEVEL = 3;
 /** `Player.allocTarget` value meaning "Defend". */
 export const DEFEND = 255;
 /** Size of the on-chain `battle_log` ring buffer. */
@@ -19,8 +28,8 @@ export type Phase = 'Lobby' | 'Active' | 'Ended';
 export type PlayerStatus = 'Idle' | 'Active' | 'Left' | 'Claimed';
 
 export interface GameConfig {
-  /** Minimum stake for `join`, lamports. */
-  minStake: bigint;
+  /** Everyone enters with exactly this many lamports; every member owns an equal share. */
+  ticket: bigint;
   epochSecs: number;
   /** 2000 = 20% leave fee. */
   leaveFeeBps: number;
@@ -34,6 +43,18 @@ export interface GameConfig {
   stormDecayBps: number;
   /** Bitmask per territory: bit `j` set ⇒ territory j is adjacent. */
   adjacency: number[];
+  /** Starting garrison of the neutral plains (decays with the storm). */
+  plainsDefense: bigint;
+  /** 1000 = 10% of every battle's spoils goes to the plains pot. */
+  plainsTaxBps: number;
+  /** Upgrade level n costs n × this of the treasury. */
+  upgradeCostBps: number;
+  /** Each upgrade level adds this to attack (armory) or defense (walls). */
+  upgradeBonusBps: number;
+  /** Attack and defense bonus per territory held beyond the first. */
+  conquestBonusBps: number;
+  /** After this long in the lobby anyone may start the war. */
+  lobbySecs: number;
 }
 
 export interface Faction {
@@ -53,14 +74,18 @@ export interface Faction {
   attackAlloc: bigint[];
   /** Ratri Raid: true once this faction has attacked while holding the Ratri power. */
   ambushUsed: boolean;
+  /** Level of each upgrade, indexed by `UPGRADE`. */
+  upgrades: number[];
+  /** Epoch of the last upgrade purchase (one per kingdom per epoch). */
+  upgradedEpoch: number;
 }
 
 export interface BattleEntry {
   epoch: number;
   territory: number;
-  /** Faction that owned the territory when the battle started. */
+  /** Faction that owned the territory when the battle started (`NEUTRAL` for unheld plains). */
   defender: number;
-  /** Winning faction (== defender ⇒ HELD). */
+  /** Winning faction (== defender ⇒ HELD; `NEUTRAL` ⇒ the plains garrison held). */
   winner: number;
   /** Defender bucket size: defender holds iff roll < defense. */
   defense: bigint;
@@ -72,6 +97,10 @@ export interface BattleEntry {
   spoils: bigint;
   /** The defender lost its last territory. */
   eliminated: boolean;
+  /** Taken without a roll: nobody was inside the walls (docs/ARCHITECTURE.md §10.3). */
+  captured?: boolean;
+  /** Decided by the hand fight, no roll: captured if the fort was cleared, else held (§10.8). */
+  byFight?: boolean;
 }
 
 export interface Game {
@@ -80,7 +109,7 @@ export interface Game {
   gameId: number;
   phase: Phase;
   epoch: number;
-  /** unix seconds */
+  /** unix seconds: end of the epoch, or of the lobby while `phase === 'Lobby'`. */
   epochEndsAt: number;
   pendingVrf: boolean;
   config: GameConfig;
@@ -88,12 +117,18 @@ export interface Game {
   baseDefense: bigint;
   /** Total battles ever fought (on-chain ring buffer cursor). */
   battleCount: number;
-  /** Faction index owning each territory. */
+  /** Live garrison of the neutral plains. */
+  plainsDefense: bigint;
+  /** Lamports waiting for the plains holder (paid at every bell). */
+  plainsPot: bigint;
+  /** Faction index owning each territory (`NEUTRAL` for unheld plains); length N_TERRITORIES. */
   territoryOwner: number[];
   factions: Faction[];
   winner: number | null;
   /** Oldest first, newest last, at most BATTLE_LOG_SIZE entries (ring buffer flattened). */
   battleLog: BattleEntry[];
+  /** Gate hit points per homeland (chain; the mock keeps them in the store). */
+  gates?: number[];
 }
 
 export interface Player {

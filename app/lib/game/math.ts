@@ -7,19 +7,25 @@
  * `&mut` versions. Clone first (`cloneGame`) when you need the previous state.
  */
 import { POWER } from './factions';
+import type { TacticalFactors } from './tactics';
 import {
   BATTLE_LOG_SIZE,
   type BattleEntry,
   type Faction,
   type Game,
   type GameConfig,
+  MAX_UPGRADE_LEVEL,
   N_KINGDOMS,
+  N_TERRITORIES,
+  NEUTRAL,
+  PLAINS,
+  UPGRADE,
 } from './types';
 
 export const BPS = 10_000n;
 export const LAMPORTS_PER_SOL = 1_000_000_000n;
-/** Shares minted per lamport when a kingdom is empty (same as the Rust `mint_shares`). */
-export const INITIAL_SHARES_PER_LAMPORT = 1_000_000n;
+/** Every member holds exactly this many shares, so a treasury splits equally per head. */
+export const SHARES_PER_MEMBER = 1_000_000n;
 
 /** Power multipliers, in bps. */
 export const FORTRESS_DEFENSE_BPS = 13_000n; // ×1.3
@@ -28,13 +34,19 @@ export const SAMUDRA_LOOT_BPS = 12_500n; // +25%
 export const RATRI_FIRST_ATTACK_BPS = 15_000n; // ×1.5
 
 export const DEFAULT_CONFIG: Omit<GameConfig, 'adjacency'> = {
-  minStake: 50_000_000n, // 0.05 SOL
+  ticket: 100_000_000n, // 0.1 SOL, the same for everyone
   epochSecs: 60,
   leaveFeeBps: 2000,
   switchFeeBps: 4000,
   kLossBps: 2000,
   baseDefense: 100_000_000n, // 0.1 SOL of strength
   stormDecayBps: 500,
+  plainsDefense: 300_000_000n, // 0.3 SOL garrison on the plains
+  plainsTaxBps: 1000,
+  upgradeCostBps: 500,
+  upgradeBonusBps: 1500,
+  conquestBonusBps: 1500,
+  lobbySecs: 120,
 };
 
 const min = (a: bigint, b: bigint) => (a < b ? a : b);
@@ -51,28 +63,21 @@ export function valueOf(f: Faction, shares: bigint, generation = f.generation): 
   return (shares * f.treasury) / f.totalShares;
 }
 
-/** Normalised share price: 1.0 for a fresh kingdom, rises as the treasury gains value. */
-export function sharePrice(f: Faction): number {
-  if (f.totalShares === 0n) return 1;
-  return Number((f.treasury * INITIAL_SHARES_PER_LAMPORT * 1_000_000n) / f.totalShares) / 1_000_000;
+/** One member's equal share of the treasury, in lamports (what a new member's share is worth). */
+export function perMember(f: Faction): bigint {
+  return f.totalShares === 0n ? 0n : (SHARES_PER_MEMBER * f.treasury) / f.totalShares;
 }
 
-/** Deposits `lamports` into the faction and returns the shares minted. */
+/** Adds a member's ticket to the treasury and returns their (equal) shares. */
 export function mintShares(f: Faction, lamports: bigint): bigint {
-  if (f.treasury === 0n || f.totalShares === 0n) {
-    if (f.totalShares !== 0n) {
-      f.generation += 1; // drained kingdom: stale shares can't claim the new deposit
-      f.members = 0;
-    }
-    const minted = lamports * INITIAL_SHARES_PER_LAMPORT;
-    f.totalShares = minted;
-    f.treasury += lamports;
-    return minted;
+  if (f.treasury === 0n && f.totalShares !== 0n) {
+    f.generation += 1; // drained kingdom: stale shares can't claim the new deposit
+    f.members = 0;
+    f.totalShares = 0n;
   }
-  const minted = (lamports * f.totalShares) / f.treasury;
-  f.totalShares += minted;
+  f.totalShares += SHARES_PER_MEMBER;
   f.treasury += lamports;
-  return minted;
+  return SHARES_PER_MEMBER;
 }
 
 /** Burns `shares` and returns the lamports paid out. The fee portion stays in the treasury. */
@@ -108,7 +113,7 @@ export function previewSwitch(g: Game, f: Faction, shares: bigint, generation = 
 
 export function ownedMask(game: Game, f: number): number {
   let m = 0;
-  for (let t = 0; t < N_KINGDOMS; t++) if (game.territoryOwner[t] === f) m |= 1 << t;
+  for (let t = 0; t < N_TERRITORIES; t++) if (game.territoryOwner[t] === f) m |= 1 << t;
   return m;
 }
 
@@ -122,7 +127,7 @@ export function canAttack(game: Game, f: number, t: number): boolean {
 
 export function validTargets(game: Game, f: number): number[] {
   const out: number[] = [];
-  for (let t = 0; t < N_KINGDOMS; t++) if (canAttack(game, f, t)) out.push(t);
+  for (let t = 0; t < N_TERRITORIES; t++) if (canAttack(game, f, t)) out.push(t);
   return out;
 }
 
@@ -143,30 +148,78 @@ export function effectiveAllocs(game: Game): bigint[][] {
 // Battle powers
 // ---------------------------------------------------------------------------------------------
 
-export function attackPowerOf(f: Faction, committed: bigint): bigint {
+/** Multiplier (bps) from territories held beyond the first: a conqueror hits harder. */
+export function conquestBps(f: Faction, cfg: GameConfig): bigint {
+  return BPS + BigInt(cfg.conquestBonusBps) * BigInt(Math.max(0, f.territories - 1));
+}
+
+/** Multiplier (bps) from an upgrade's level. */
+export function upgradeBps(f: Faction, kind: number, cfg: GameConfig): bigint {
+  return BPS + BigInt(cfg.upgradeBonusBps) * BigInt(f.upgrades[kind] ?? 0);
+}
+
+export function attackPowerOf(f: Faction, committed: bigint, cfg: GameConfig): bigint {
   let p = committed;
   if (has(f, POWER.GAJA_SENA)) p = bps(p, GAJA_ATTACK_BPS);
   if (has(f, POWER.RATRI_RAID) && !f.ambushUsed) p = bps(p, RATRI_FIRST_ATTACK_BPS);
-  return p;
+  p = bps(p, upgradeBps(f, UPGRADE.ARMORY, cfg));
+  return bps(p, conquestBps(f, cfg));
 }
 
-export function defensePowerOf(f: Faction, committedToAttacks: bigint, baseDefense: bigint): bigint {
+export function defensePowerOf(f: Faction, committedToAttacks: bigint, baseDefense: bigint, cfg: GameConfig): bigint {
   const free = f.treasury > committedToAttacks ? f.treasury - committedToAttacks : 0n;
   let d = f.territories === 0 ? 0n : free / BigInt(f.territories);
   if (has(f, POWER.KURU_FORTRESS)) d = bps(d, FORTRESS_DEFENSE_BPS);
-  return d + baseDefense;
+  d = bps(d, upgradeBps(f, UPGRADE.WALLS, cfg));
+  return bps(d, conquestBps(f, cfg)) + baseDefense;
 }
 
-/** Defense of kingdom `def` right now (for previews). */
+/** Defense of kingdom `def` right now (for previews). `NEUTRAL` → the plains garrison. */
 export function defensePower(game: Game, def: number): bigint {
+  if (def === NEUTRAL) return game.plainsDefense > 0n ? game.plainsDefense : 1n;
   const eff = effectiveAllocs(game);
-  return defensePowerOf(game.factions[def], eff[def].reduce((a, b) => a + b, 0n), game.baseDefense);
+  return defensePowerOf(game.factions[def], eff[def].reduce((a, b) => a + b, 0n), game.baseDefense, game.config);
 }
 
 /** Attack of kingdom `attacker` at `t` right now (for previews). */
 export function attackPower(game: Game, attacker: number, t: number): bigint {
   if (game.territoryOwner[t] === attacker || !game.factions[attacker].alive) return 0n;
-  return attackPowerOf(game.factions[attacker], effectiveAllocs(game)[attacker][t]);
+  return attackPowerOf(game.factions[attacker], effectiveAllocs(game)[attacker][t], game.config);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Upgrades  (math::upgrade)
+// ---------------------------------------------------------------------------------------------
+
+/** Price of the next level of `kind`: (level + 1) × upgradeCostBps of the treasury. */
+export function upgradeCost(f: Faction, kind: number, cfg: GameConfig): bigint {
+  return bps(f.treasury, BigInt((f.upgrades[kind] ?? 0) + 1) * BigInt(cfg.upgradeCostBps));
+}
+
+/** Why kingdom `fi` can't buy `kind` right now, or null if it can. */
+export function upgradeBlocker(game: Game, fi: number, kind: number): string | null {
+  const f = game.factions[fi];
+  if (game.phase !== 'Active') return 'The war has not started';
+  if (game.pendingVrf) return 'A battle is being resolved';
+  if (!f.alive) return 'Kingdom eliminated';
+  if ((f.upgrades[kind] ?? 0) >= MAX_UPGRADE_LEVEL) return 'Highest level';
+  if (f.upgradedEpoch === game.epoch) return 'Already upgraded this epoch';
+  const cost = upgradeCost(f, kind, game.config);
+  if (cost === 0n || cost > f.treasury) return 'Treasury too small';
+  return null;
+}
+
+/** Mirror of `math::upgrade`: spends treasury on the next level; the SOL feeds the plains pot. */
+export function applyUpgrade(game: Game, fi: number, kind: number): bigint {
+  const why = upgradeBlocker(game, fi, kind);
+  if (why) throw new Error(why);
+  const f = game.factions[fi];
+  const cost = upgradeCost(f, kind, game.config);
+  f.treasury -= cost;
+  f.upgrades[kind] = (f.upgrades[kind] ?? 0) + 1;
+  f.upgradedEpoch = game.epoch;
+  game.plainsPot += cost;
+  return cost;
 }
 
 export function isContested(game: Game, t: number): boolean {
@@ -195,15 +248,28 @@ export interface BattleOdds {
  * Win odds for the battle at `t`. Optionally adds a hypothetical extra allocation (for the
  * WarRoom "what if I commit X" preview) without mutating `game`.
  */
-export function battleOdds(game: Game, t: number, extra?: { faction: number; amount: bigint }): BattleOdds {
+export function battleOdds(game: Game, t: number, extra?: { faction: number; amount: bigint }, tactics?: TacticalFactors | null): BattleOdds {
   let g = game;
   if (extra && extra.amount > 0n) {
     g = cloneGame(game);
     g.factions[extra.faction].attackAlloc[t] += extra.amount;
   }
   const defender = g.territoryOwner[t];
-  const defense = defensePower(g, defender);
-  const attacks = g.factions.map((_, i) => (i === defender ? 0n : attackPower(g, i, t)));
+  let defense = defensePower(g, defender);
+  let attacks = g.factions.map((_, i) => (i === defender ? 0n : attackPower(g, i, t)));
+  if (tactics) {
+    if (tactics.capturedBy !== null && attacks[tactics.capturedBy] > 0n) {
+      defense = 0n;
+      attacks = attacks.map((a, i) => (i === tactics.capturedBy ? (a > 0n ? a : 1n) : 0n));
+    } else if (t !== PLAINS) {
+      // the hand fight decides a walled realm (§10.8): until the fort is cleared, it holds
+      attacks = attacks.map(() => 0n);
+      if (defense === 0n) defense = 1n;
+    } else {
+      defense = bps(defense, tactics.defenseBps);
+      attacks = attacks.map((a, i) => bps(a, tactics.attackBps[i]));
+    }
+  }
   const total = defense + attacks.reduce((a, b) => a + b, 0n);
   const p = (x: bigint) => (total === 0n ? 0 : Number((x * 1_000_000n) / total) / 1_000_000);
   const pWin = attacks.map((a, i) => (i === defender ? p(defense) : p(a)));
@@ -214,32 +280,47 @@ export function battleOdds(game: Game, t: number, extra?: { faction: number; amo
 // Resolution  (mirror of math::resolve_battle / resolve_epoch)
 // ---------------------------------------------------------------------------------------------
 
+/** Moves up to `amount` from a kingdom to `to` (`NEUTRAL` = the plains pot). */
 function moveTreasury(game: Game, from: number, to: number, amount: bigint): bigint {
   const a = min(amount, game.factions[from].treasury);
   game.factions[from].treasury -= a;
-  game.factions[to].treasury += a;
+  if (to === NEUTRAL) game.plainsPot += a;
+  else game.factions[to].treasury += a;
   return a;
 }
 
 /** Resolves territory `t` with u64 `rnd` using the epoch-start allocation snapshot `eff`. */
-export function resolveBattle(game: Game, eff: bigint[][], t: number, rnd: bigint): BattleEntry | null {
+export function resolveBattle(game: Game, eff: bigint[][], t: number, rnd: bigint, tactics?: TacticalFactors | null): BattleEntry | null {
   const d = game.territoryOwner[t];
+  const neutral = d === NEUTRAL;
   const attack = Array.from({ length: N_KINGDOMS }, () => 0n);
   let mask = 0;
   for (let f = 0; f < N_KINGDOMS; f++) {
     if (f !== d && game.factions[f].alive && eff[f][t] > 0n) {
-      attack[f] = attackPowerOf(game.factions[f], eff[f][t]);
+      attack[f] = attackPowerOf(game.factions[f], eff[f][t], game.config);
+      if (tactics) attack[f] = bps(attack[f], tactics.attackBps[f]);
       if (attack[f] > 0n) mask |= 1 << f;
     }
   }
   if (mask === 0) return null;
-  const committedByD = eff[d].reduce((a, b) => a + b, 0n);
-  const defense = defensePowerOf(game.factions[d], committedByD, game.baseDefense);
+  let defense = neutral
+    ? game.plainsDefense > 0n ? game.plainsDefense : 1n
+    : defensePowerOf(game.factions[d], eff[d].reduce((a, b) => a + b, 0n), game.baseDefense, game.config);
+  if (tactics) defense = bps(defense, tactics.defenseBps);
+  // An abandoned fort falls to whoever walked in: no roll, and the attack buckets collapse.
+  const captured = !!tactics && tactics.capturedBy !== null && (mask & (1 << tactics.capturedBy)) !== 0;
+  if (captured) {
+    defense = 0n;
+    for (let f = 0; f < N_KINGDOMS; f++) if (f !== tactics!.capturedBy) attack[f] = 0n;
+  }
+  // Walled realms are decided by the hand fight alone (§10.8): cleared → captured, else held.
+  const byFight = !!tactics && t !== PLAINS;
   const total = defense + attack.reduce((a, b) => a + b, 0n);
-  const roll = rnd % total;
+  const roll = captured || byFight ? 0n : rnd % total;
 
   let winner = d;
-  if (roll >= defense) {
+  if (captured) winner = tactics!.capturedBy!;
+  else if (!byFight && roll >= defense) {
     let acc = defense;
     for (let f = 0; f < N_KINGDOMS; f++) {
       acc += attack[f];
@@ -262,38 +343,51 @@ export function resolveBattle(game: Game, eff: bigint[][], t: number, rnd: bigin
 
   let eliminated = false;
   if (winner !== d) {
-    const loser = game.factions[d];
-    let loot: bigint;
-    if (loser.territories <= 1) loot = loser.treasury;
-    else {
-      loot = loser.treasury / BigInt(loser.territories);
-      if (has(game.factions[winner], POWER.SAMUDRA_VYAPAR)) loot = bps(loot, SAMUDRA_LOOT_BPS);
+    if (!neutral) {
+      const loser = game.factions[d];
+      let loot: bigint;
+      if (loser.territories <= 1) loot = loser.treasury;
+      else {
+        loot = loser.treasury / BigInt(loser.territories);
+        if (has(game.factions[winner], POWER.SAMUDRA_VYAPAR)) loot = bps(loot, SAMUDRA_LOOT_BPS);
+      }
+      spoils += moveTreasury(game, d, winner, loot);
+      loser.territories -= 1;
+      if (loser.territories === 0) {
+        eliminated = true;
+        const powers = loser.powers;
+        const rest = loser.treasury;
+        loser.alive = false;
+        loser.generation += 1;
+        loser.totalShares = 0n;
+        loser.members = 0;
+        loser.attackAlloc = loser.attackAlloc.map(() => 0n);
+        loser.upgrades = loser.upgrades.map(() => 0);
+        game.factions[winner].powers |= powers;
+        spoils += moveTreasury(game, d, winner, rest);
+      }
     }
-    spoils += moveTreasury(game, d, winner, loot);
     game.territoryOwner[t] = winner;
-    loser.territories -= 1;
     game.factions[winner].territories += 1;
-    if (loser.territories === 0) {
-      eliminated = true;
-      const powers = loser.powers;
-      const rest = loser.treasury;
-      loser.alive = false;
-      loser.generation += 1;
-      loser.totalShares = 0n;
-      loser.members = 0;
-      loser.attackAlloc = loser.attackAlloc.map(() => 0n);
-      game.factions[winner].powers |= powers;
-      spoils += moveTreasury(game, d, winner, rest);
-    }
   }
 
-  return { epoch: game.epoch, territory: t, defender: d, winner, attackersMask: mask, defense, total, roll, spoils, eliminated };
+  // The plains tax: a cut of every kingdom's winnings feeds the plains pot.
+  if (winner !== NEUTRAL && spoils > 0n) {
+    spoils -= moveTreasury(game, winner, NEUTRAL, bps(spoils, game.config.plainsTaxBps));
+  }
+
+  return { epoch: game.epoch, territory: t, defender: d, winner, attackersMask: mask, defense, total, roll, spoils, eliminated, captured, ...(byFight ? { byFight } : {}) };
 }
 
-/** Returns the faction owning every territory, or null. */
+/** Mirror of `math::lobby_ready`: anyone may start once the timer ran out and two kingdoms have members. */
+export function lobbyReady(game: Game, now: number): boolean {
+  return game.phase === 'Lobby' && now >= game.epochEndsAt && game.factions.filter((f) => f.members > 0).length >= 2;
+}
+
+/** Returns the faction owning every territory (plains included), or null. */
 export function checkWinner(game: Game): number | null {
   const o = game.territoryOwner[0];
-  return game.territoryOwner.every((x) => x === o) ? o : null;
+  return o !== NEUTRAL && game.territoryOwner.every((x) => x === o) ? o : null;
 }
 
 const U64 = (1n << 64n) - 1n;
@@ -318,8 +412,15 @@ export function subRoll(randomness: Uint8Array, t: number): bigint {
 export function advanceEpoch(game: Game, now: number) {
   game.epoch += 1;
   game.baseDefense -= bps(game.baseDefense, game.config.stormDecayBps);
+  game.plainsDefense -= bps(game.plainsDefense, game.config.stormDecayBps);
   game.epochEndsAt = now + game.config.epochSecs;
   game.pendingVrf = false;
+  // The plains pay their holder everything in the pot.
+  const holder = game.territoryOwner[PLAINS];
+  if (holder !== NEUTRAL && game.plainsPot > 0n) {
+    game.factions[holder].treasury += game.plainsPot;
+    game.plainsPot = 0n;
+  }
   const w = checkWinner(game);
   if (w !== null) {
     game.phase = 'Ended';
@@ -328,12 +429,12 @@ export function advanceEpoch(game: Game, now: number) {
 }
 
 /** Mirror of `battle_callback`: resolve every contested territory, log, reset, advance. */
-export function resolveEpoch(game: Game, randomness: Uint8Array, now: number): BattleEntry[] {
+export function resolveEpoch(game: Game, randomness: Uint8Array, now: number, tactics?: TacticalFactors[] | null): BattleEntry[] {
   const eff = effectiveAllocs(game);
   const entries: BattleEntry[] = [];
   const attacked = Array.from({ length: N_KINGDOMS }, () => false);
-  for (let t = 0; t < N_KINGDOMS; t++) {
-    const e = resolveBattle(game, eff, t, subRoll(randomness, t));
+  for (let t = 0; t < N_TERRITORIES; t++) {
+    const e = resolveBattle(game, eff, t, subRoll(randomness, t), tactics ? tactics[t] : null);
     if (!e) continue;
     for (let f = 0; f < N_KINGDOMS; f++) if ((e.attackersMask & (1 << f)) !== 0) attacked[f] = true;
     entries.push(e);
@@ -361,8 +462,10 @@ export function newFaction(i: number): Faction {
     powers: 1 << i,
     alive: true,
     generation: 0,
-    attackAlloc: Array.from({ length: N_KINGDOMS }, () => 0n),
+    attackAlloc: Array.from({ length: N_TERRITORIES }, () => 0n),
     ambushUsed: false,
+    upgrades: [0, 0],
+    upgradedEpoch: 0,
   };
 }
 
@@ -380,8 +483,10 @@ export function newGame(
     pendingVrf: false,
     config: { ...config, adjacency: [...config.adjacency] },
     baseDefense: config.baseDefense,
+    plainsDefense: config.plainsDefense,
+    plainsPot: 0n,
     battleCount: 0,
-    territoryOwner: Array.from({ length: N_KINGDOMS }, (_, i) => i),
+    territoryOwner: Array.from({ length: N_TERRITORIES }, (_, i) => (i === PLAINS ? NEUTRAL : i)),
     factions: Array.from({ length: N_KINGDOMS }, (_, i) => newFaction(i)),
     winner: null,
     battleLog: [],
@@ -392,9 +497,9 @@ export function cloneGame(g: Game): Game {
   return structuredClone(g);
 }
 
-/** Σ faction treasuries = the live pot. */
+/** Σ faction treasuries + the plains pot = everything at stake. */
 export function totalPot(game: Game): bigint {
-  return game.factions.reduce((a, f) => a + f.treasury, 0n);
+  return game.factions.reduce((a, f) => a + f.treasury, 0n) + game.plainsPot;
 }
 
 export function lamportsToSol(l: bigint): number {

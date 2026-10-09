@@ -7,6 +7,9 @@ import { test } from 'node:test';
 import { ADJACENCY, POWER, isAdjacent } from './factions';
 import {
   DEFAULT_CONFIG,
+  SHARES_PER_MEMBER,
+  advanceEpoch,
+  applyUpgrade,
   attackPower,
   battleOdds,
   burnWithFee,
@@ -18,31 +21,34 @@ import {
   newGame,
   resolveBattle,
   resolveEpoch,
+  upgradeCost,
   valueOf,
 } from './math';
-import type { GameConfig } from './types';
+import { NEUTRAL, PLAINS, UPGRADE, type GameConfig } from './types';
 
 const SOL = 1_000_000_000n;
 const cfg: GameConfig = { ...DEFAULT_CONFIG, epochSecs: 15, adjacency: [...ADJACENCY] };
 
-test('adjacency is symmetric and matches ARCHITECTURE §2', () => {
-  for (let a = 0; a < 6; a++) for (let b = 0; b < 6; b++) assert.equal(isAdjacent(a, b), isAdjacent(b, a));
-  assert.deepEqual(ADJACENCY, [0b100110, 0b001101, 0b010011, 0b110010, 0b101100, 0b011001]);
+test('adjacency is symmetric, matches ARCHITECTURE §2 and the program, and the plains border all', () => {
+  for (let a = 0; a < 7; a++) for (let b = 0; b < 7; b++) assert.equal(isAdjacent(a, b), isAdjacent(b, a));
+  // same as DEFAULT_ADJACENCY in programs/samrajya/src/constants.rs
+  assert.deepEqual(ADJACENCY, [0b1100110, 0b1001101, 0b1010011, 0b1110010, 0b1101100, 0b1011001, 0b0111111]);
 });
 
-test('mint into an empty kingdom: 1e6 shares per lamport', () => {
+test('every member gets the same shares', () => {
   const f = newFaction(0);
-  assert.equal(mintShares(f, 2n * SOL), 2n * SOL * 1_000_000n);
+  assert.equal(mintShares(f, SOL), SHARES_PER_MEMBER);
+  assert.equal(mintShares(f, SOL), SHARES_PER_MEMBER);
   assert.equal(f.treasury, 2n * SOL);
 });
 
-test('mint does not dilute existing members', () => {
+test('the treasury splits equally per head, whenever you joined', () => {
   const f = newFaction(0);
   const a = mintShares(f, 1n * SOL);
   f.treasury += 1n * SOL; // conquest doubled the treasury
-  const b = mintShares(f, 2n * SOL);
-  assert.equal(valueOf(f, a), 2n * SOL);
-  assert.equal(valueOf(f, b), 2n * SOL);
+  const b = mintShares(f, 1n * SOL);
+  assert.equal(valueOf(f, a), 1_500_000_000n);
+  assert.equal(valueOf(f, b), 1_500_000_000n);
 });
 
 test('leave pays exactly 80% and the 20% raises the share price', () => {
@@ -64,7 +70,8 @@ test('switch moves exactly 60%, 40% stays', () => {
   const ns = mintShares(B, moved);
   assert.equal(moved, 600_000_000n);
   assert.equal(A.treasury, 400_000_000n);
-  assert.equal(valueOf(B, ns), 600_000_000n);
+  assert.equal(B.treasury, 1_600_000_000n);
+  assert.equal(valueOf(B, ns), 800_000_000n); // an equal half of B's treasury
 });
 
 test('defense: Fortress ×1.3 on home strength, plus base defense', () => {
@@ -109,7 +116,8 @@ test('repel: attacker pays k_loss to the defender (half with Annapurna)', () => 
   assert.equal(e.attackersMask, 0b10010);
   assert.equal(g.factions[1].treasury, 9n * SOL); // 20% of 5
   assert.equal(g.factions[4].treasury, 9_500_000_000n); // 10% of 5
-  assert.equal(g.factions[2].treasury, 11_500_000_000n);
+  assert.equal(g.factions[2].treasury, 11_350_000_000n); // 10 + 1.5, less the 10% plains tax
+  assert.equal(g.plainsPot, 150_000_000n);
 });
 
 test('conquest: loot = treasury / territories; last territory eliminates', () => {
@@ -123,7 +131,8 @@ test('conquest: loot = treasury / territories; last territory eliminates', () =>
   assert.equal(g.territoryOwner[1], 0);
   assert.equal(g.factions[1].alive, false);
   assert.equal(g.factions[1].treasury, 0n);
-  assert.equal(g.factions[0].treasury, 16n * SOL);
+  assert.equal(g.factions[0].treasury, 15_400_000_000n); // 10 + 6, less the 10% plains tax
+  assert.equal(g.plainsPot, 600_000_000n);
   assert.equal(g.factions[0].powers, POWER.KURU_FORTRESS | POWER.GAJA_SENA);
 });
 
@@ -139,7 +148,7 @@ test('Samudra Vyapar +25% loot', () => {
   g.factions[2].attackAlloc[0] = 10n * SOL;
   const e = resolveBattle(g, effectiveAllocs(g), 0, battleOdds(g, 0).total - 1n)!;
   assert.equal(e.winner, 2);
-  assert.equal(g.factions[2].treasury, 15n * SOL); // 10 + 4 × 1.25
+  assert.equal(g.factions[2].treasury, 14_500_000_000n); // 10 + 4 × 1.25, less the 10% plains tax
   assert.equal(g.factions[0].treasury, 3n * SOL);
 });
 
@@ -168,7 +177,7 @@ test('losing attackers pay k_loss to whoever wins (also when another attacker wi
   assert.equal(e.winner, 0);
   assert.equal(e.eliminated, true);
   assert.equal(g.factions[1].treasury, 9n * SOL); // Magadh lost 20% of 5 SOL to Hastinapur
-  assert.equal(g.factions[0].treasury, 12n * SOL); // 10 + 1 (Magadh) + 1 (Kalinga's whole treasury)
+  assert.equal(g.factions[0].treasury, 11_800_000_000n); // 10 + 1 (Magadh) + 1 (Kalinga's whole treasury), less the tax
   assert.equal(g.factions[2].generation, 1);
 });
 
@@ -186,4 +195,48 @@ test('subRoll matches the Rust program (shared vector)', async () => {
     [0, 1, 2, 3, 4, 5].map((t) => subRoll(r, t)),
     [2783288195278980683n, 3545563980559904583n, 4689555029660771741n, 15053824720183481231n, 9565555852255760974n, 11935353444744740481n],
   );
+});
+
+test('the plains start neutral, take failed attacks into the pot and pay it to their holder', () => {
+  const g = newGame(cfg, { now: 0 });
+  assert.equal(g.territoryOwner[PLAINS], NEUTRAL);
+  for (let f = 0; f < 6; f++) assert.equal(canAttack(g, f, PLAINS), true);
+  mintShares(g.factions[0], 10n * SOL);
+  g.factions[0].attackAlloc[PLAINS] = 10n * SOL;
+  const eff = effectiveAllocs(g);
+  const held = resolveBattle(g, eff, PLAINS, 0n)!; // roll 0 ⇒ the garrison holds
+  assert.equal(held.defender, NEUTRAL);
+  assert.equal(held.winner, NEUTRAL);
+  assert.equal(g.plainsPot, 2n * SOL);
+  const won = resolveBattle(g, eff, PLAINS, g.plainsDefense)!;
+  assert.equal(won.winner, 0);
+  assert.equal(g.territoryOwner[PLAINS], 0);
+  assert.equal(g.factions[0].territories, 2);
+  advanceEpoch(g, 0);
+  assert.equal(g.plainsPot, 0n);
+  assert.equal(g.factions[0].treasury, 10n * SOL);
+  assert.equal(g.phase, 'Active');
+});
+
+test('upgrades spend treasury into the pot and boost power; one per epoch', () => {
+  const g = newGame(cfg, { now: 0 });
+  mintShares(g.factions[0], 10n * SOL);
+  g.factions[0].attackAlloc[1] = 2n * SOL;
+  const before = attackPower(g, 0, 1);
+  assert.equal(upgradeCost(g.factions[0], UPGRADE.ARMORY, cfg), SOL / 2n);
+  assert.equal(applyUpgrade(g, 0, UPGRADE.ARMORY), SOL / 2n);
+  assert.equal(g.plainsPot, SOL / 2n);
+  assert.equal(attackPower(g, 0, 1), (before * 115n) / 100n);
+  assert.throws(() => applyUpgrade(g, 0, UPGRADE.WALLS));
+  g.epoch += 1;
+  assert.equal(applyUpgrade(g, 0, UPGRADE.ARMORY), 950_000_000n); // 10% of 9.5
+});
+
+test('each territory beyond the first adds 15% attack and defense', () => {
+  const g = newGame(cfg, { now: 0 });
+  mintShares(g.factions[0], 10n * SOL);
+  g.factions[0].attackAlloc[1] = 2n * SOL;
+  const one = attackPower(g, 0, 1);
+  g.factions[0].territories = 3;
+  assert.equal(attackPower(g, 0, 1), (one * 130n) / 100n);
 });
