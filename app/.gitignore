@@ -52,3 +52,4 @@ next-env.d.ts
 
 # example env files are safe to share
 !.env*.example
+.next-*/
