@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 
-import { isMockMode } from '@/lib/store/game';
+import { isMockMode, mockWallet, useGame } from '@/lib/store/game';
 
 import { chainActions } from './chain-actions';
 import { mockActions } from './mock-actions';
@@ -26,17 +26,20 @@ export const STEP_LABEL: Record<ActionStep, string> = {
  * `busy` is true while any action is in flight; `step` describes the current stage.
  */
 export function useGameActions() {
-  const { publicKey, signTransaction } = useWallet();
+  const { publicKey, signTransaction, signAllTransactions } = useWallet();
+  // Actions are bound to one war; rebuild them when the feed moves to a new one.
+  const gameId = useGame((s) => s.gameId);
   const [busy, setBusy] = useState(false);
   const [step, setStep] = useState<ActionStep>('idle');
   const [error, setError] = useState<string | null>(null);
 
   const actions = useMemo<GameActions | null>(() => {
-    if (!publicKey) return null;
-    const raw: GameActions = isMockMode()
-      ? mockActions(publicKey.toBase58())
+    const mock = isMockMode();
+    if (!publicKey && !mock) return null;
+    const raw: GameActions = mock
+      ? mockActions(publicKey ? publicKey.toBase58() : mockWallet())
       : signTransaction
-        ? chainActions({ publicKey, signTransaction }, setStep)
+        ? chainActions({ publicKey: publicKey!, signTransaction, signAllTransactions }, setStep, gameId ?? undefined)
         : null!;
     if (!raw) return null;
     // Wrap every action with busy/error bookkeeping.
@@ -60,12 +63,22 @@ export function useGameActions() {
     return {
       pledge: wrap(raw.pledge),
       allocate: wrap(raw.allocate),
+      upgrade: wrap(raw.upgrade),
+      newWar: wrap(raw.newWar),
       switchKingdom: wrap(raw.switchKingdom),
       leave: wrap(raw.leave),
       claim: wrap(raw.claim),
       ringBell: raw.ringBell,
+      startWar: wrap(raw.startWar),
+      moveUnit: raw.moveUnit,
+      setRole: wrap(raw.setRole),
+      setGear: wrap(raw.setGear),
+      march: wrap(raw.march),
+      // strikes are rapid-fire: no busy flag, errors (cooldown, fallen) are expected and silent
+      strike: raw.strike,
+      rally: wrap(raw.rally),
     };
-  }, [publicKey, signTransaction]);
+  }, [publicKey, signTransaction, signAllTransactions, gameId]);
 
-  return { actions, busy, step, stepLabel: STEP_LABEL[step], error, connected: !!publicKey };
+  return { actions, busy, step, stepLabel: STEP_LABEL[step], error, connected: !!publicKey || isMockMode() };
 }

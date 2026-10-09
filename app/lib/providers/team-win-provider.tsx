@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useEffect, ReactNode } from 'react';
 
+import { useGame } from '../store/game';
 import { useModal } from './modal-provider';
 import { useTeamWinDetection } from '../hooks/use-team-win-detection';
 
@@ -13,8 +14,14 @@ interface TeamWinProviderProps {
 }
 
 export function TeamWinProvider({ children }: TeamWinProviderProps) {
-  const { openModal } = useModal();
+  const { openModal, closeModal } = useModal();
   const { teamWinData, hasShownWinModal, markWinModalAsShown, isLoading } = useTeamWinDetection();
+  const phase = useGame((s) => s.game?.phase);
+
+  // A new war has been opened: the old victory screen goes away.
+  useEffect(() => {
+    if (phase && phase !== 'Ended') closeModal('team-win');
+  }, [phase, closeModal]);
 
   useEffect(() => {
     // Only show modal if we have win data and haven't shown it yet

@@ -1,7 +1,8 @@
 // Drives the real UI action layer (lib/actions/chain-actions.ts) from Node with a throwaway
-// keypair as the "browser wallet": pledge (session key + join + delegate + ER enlist) → leave
-// (session-signed ER leave + commit) → base withdraw.
-//   FUNDER=~/.config/solana/id.json NEXT_PUBLIC_GAME_ID=1 npx tsx scripts/smoke-actions.ts
+// keypair as the "browser wallet": pledge (session key + join + delegate + ER enlist) → switch
+// (session key) → lose the session (other browser / expired) → two more moves cost one popup →
+// leave (session-signed ER leave + commit) → base withdraw.
+//   FUNDER=~/.config/solana/id.json NEXT_PUBLIC_GAME_ID=2 npx tsx scripts/smoke-actions.ts
 import fs from 'node:fs';
 import os from 'node:os';
 import { Keypair, LAMPORTS_PER_SOL, SystemProgram, Transaction } from '@solana/web3.js';
@@ -25,7 +26,7 @@ const store = new Map<string, string>();
   const user = Keypair.generate();
   const conn = baseConnection();
   const fund = new Transaction().add(
-    SystemProgram.transfer({ fromPubkey: funder.publicKey, toPubkey: user.publicKey, lamports: 0.1 * LAMPORTS_PER_SOL }),
+    SystemProgram.transfer({ fromPubkey: funder.publicKey, toPubkey: user.publicKey, lamports: 0.15 * LAMPORTS_PER_SOL }),
   );
   fund.feePayer = funder.publicKey;
   fund.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
@@ -51,7 +52,7 @@ const store = new Map<string, string>();
 
   console.log('wallet', user.publicKey.toBase58());
   let t = Date.now();
-  await actions.pledge(2, BigInt(0.05 * LAMPORTS_PER_SOL));
+  await actions.pledge(2, BigInt(0.1 * LAMPORTS_PER_SOL));
   const p1 = await readPlayer();
   console.log(`pledged to Kalinga in ${Date.now() - t} ms, popups so far ${popups}, shares ${p1?.shares}`);
 
@@ -59,6 +60,16 @@ const store = new Map<string, string>();
   const before = popups;
   await actions.switchKingdom(4);
   console.log(`switched to Vijayanagar in ${Date.now() - t} ms with ${popups - before} popups (session key)`);
+
+  // The session is gone (cleared storage, another browser, expired): one popup re-creates it,
+  // the next move needs none.
+  for (const k of [...store.keys()]) if (k.startsWith('samrajya:session:')) store.delete(k);
+  t = Date.now();
+  const beforeLost = popups;
+  await actions.switchKingdom(2);
+  await actions.switchKingdom(4);
+  console.log(`two moves after losing the session: ${popups - beforeLost} popup(s) in ${Date.now() - t} ms (want 1)`);
+  if (popups - beforeLost !== 1) throw new Error('expected exactly one popup to re-create the session');
 
   t = Date.now();
   const balBefore = await conn.getBalance(user.publicKey);

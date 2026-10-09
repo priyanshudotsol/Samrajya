@@ -14,6 +14,55 @@ export type Samrajya = {
   },
   "instructions": [
     {
+      "name": "abortGame",
+      "docs": [
+        "Stops a broken war (authority): it ends with no winner and every member can `claim` their",
+        "current value back once it is committed to Solana."
+      ],
+      "discriminator": [
+        88,
+        212,
+        191,
+        204,
+        41,
+        184,
+        234,
+        83
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "game"
+          ]
+        },
+        {
+          "name": "game",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  97,
+                  109,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "game.game_id",
+                "account": "game"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "allocate",
       "docs": [
         "Commit `amount` lamports of your value to attack `target` (255 = defend)."
@@ -258,7 +307,8 @@ export type Samrajya = {
     {
       "name": "delegateGame",
       "docs": [
-        "Delegates the Game PDA to the ER (authority only)."
+        "Moves the Game to the ER: anyone once the war has started (the lobby stays on Solana),",
+        "the authority any time."
       ],
       "discriminator": [
         116,
@@ -272,7 +322,8 @@ export type Samrajya = {
       ],
       "accounts": [
         {
-          "name": "authority",
+          "name": "payer",
+          "writable": true,
           "signer": true
         },
         {
@@ -454,7 +505,9 @@ export type Samrajya = {
     {
       "name": "delegatePlayer",
       "docs": [
-        "Delegates the Player PDA to the ER (send in the same tx as `join`)."
+        "Delegates a Player PDA to the ER. The player may always (mid-war `join` sends it in the",
+        "same tx); anyone may once the war has started, for an enlisted player with nothing",
+        "waiting to be withdrawn (that is how the whole lobby moves to the ER at the start)."
       ],
       "discriminator": [
         235,
@@ -468,8 +521,12 @@ export type Samrajya = {
       ],
       "accounts": [
         {
-          "name": "wallet",
+          "name": "payer",
+          "writable": true,
           "signer": true
+        },
+        {
+          "name": "wallet"
         },
         {
           "name": "game"
@@ -654,7 +711,8 @@ export type Samrajya = {
     {
       "name": "endGame",
       "docs": [
-        "Commits the finished game back to base so winners can `claim`."
+        "Commits the finished game back to Solana so winners can `claim`, with any Players passed",
+        "as remaining accounts (the rest go through `release_players`)."
       ],
       "discriminator": [
         224,
@@ -795,8 +853,10 @@ export type Samrajya = {
     {
       "name": "initGame",
       "docs": [
-        "Creates the game and its SOL vault. The vault is pre-funded with rent so payouts",
-        "never leave it below the rent-exempt minimum."
+        "Creates the game and its SOL vault, and points the registry at it. Anyone may open",
+        "the next war once the previous one has ended and been committed back to base",
+        "(`end_game`), so nobody can pull players away from a war in progress. The vault is",
+        "pre-funded with rent so payouts never leave it below the rent-exempt minimum."
       ],
       "discriminator": [
         251,
@@ -834,6 +894,31 @@ export type Samrajya = {
               }
             ]
           }
+        },
+        {
+          "name": "registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "previous",
+          "optional": true
         },
         {
           "name": "vault",
@@ -880,8 +965,8 @@ export type Samrajya = {
     {
       "name": "join",
       "docs": [
-        "Deposits SOL into the vault. The deposit becomes shares when the player `enlist`s",
-        "(on the ER while the game is delegated). Fails while the Player is delegated."
+        "Deposits the ticket into the vault. It becomes one equal share when the player",
+        "`enlist`s (on the ER while the game is delegated). Fails while the Player is delegated."
       ],
       "discriminator": [
         206,
@@ -1046,6 +1131,121 @@ export type Samrajya = {
       "args": []
     },
     {
+      "name": "moveUnit",
+      "docs": [
+        "Moves your warrior (validated step), changes its action / gear / role, or teleports it",
+        "(`at` changes: to a realm your kingdom holds, or the one it ordered you to attack)."
+      ],
+      "discriminator": [
+        145,
+        126,
+        36,
+        232,
+        217,
+        195,
+        127,
+        23
+      ],
+      "accounts": [
+        {
+          "name": "signer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "game",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  97,
+                  109,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "game.game_id",
+                "account": "game"
+              }
+            ]
+          },
+          "relations": [
+            "player"
+          ]
+        },
+        {
+          "name": "player",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  97,
+                  121,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "game"
+              },
+              {
+                "kind": "account",
+                "path": "player.wallet",
+                "account": "player"
+              }
+            ]
+          }
+        },
+        {
+          "name": "sessionToken",
+          "optional": true
+        }
+      ],
+      "args": [
+        {
+          "name": "at",
+          "type": "u8"
+        },
+        {
+          "name": "x",
+          "type": "i16"
+        },
+        {
+          "name": "z",
+          "type": "i16"
+        },
+        {
+          "name": "fx",
+          "type": "i8"
+        },
+        {
+          "name": "fz",
+          "type": "i8"
+        },
+        {
+          "name": "action",
+          "type": "u8"
+        },
+        {
+          "name": "gear",
+          "type": "u8"
+        },
+        {
+          "name": "role",
+          "type": "u8"
+        }
+      ]
+    },
+    {
       "name": "processUndelegation",
       "discriminator": [
         196,
@@ -1151,10 +1351,67 @@ export type Samrajya = {
       ]
     },
     {
+      "name": "releasePlayers",
+      "docs": [
+        "After the war: commits and undelegates the Players passed as remaining accounts back to",
+        "Solana (permissionless; send in batches, then `end_game`)."
+      ],
+      "discriminator": [
+        212,
+        187,
+        190,
+        86,
+        205,
+        159,
+        0,
+        219
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "game",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  97,
+                  109,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "game.game_id",
+                "account": "game"
+              }
+            ]
+          }
+        },
+        {
+          "name": "magicProgram",
+          "address": "Magic11111111111111111111111111111111111111"
+        },
+        {
+          "name": "magicContext",
+          "writable": true,
+          "address": "MagicContext1111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "resolveEpoch",
       "docs": [
-        "Permissionless game clock. If nobody attacked, just advances the epoch; otherwise",
-        "requests VRF and the battles resolve in `battle_callback`."
+        "Permissionless game clock (the bell). Remaining accounts: every enlisted member's Player",
+        "(checked complete), so the program can read the hand fight at each fort: no living defender",
+        "inside and an attacker at the gate takes it, otherwise it holds (§10.8). Only an attack on",
+        "the open plains still needs the VRF; then the battles resolve in `battle_callback`."
       ],
       "discriminator": [
         127,
@@ -1298,6 +1555,10 @@ export type Samrajya = {
     },
     {
       "name": "startGame",
+      "docs": [
+        "Closes the lobby. The authority may start any time; anyone else once the lobby",
+        "timer has run out and at least two kingdoms have members."
+      ],
       "discriminator": [
         249,
         47,
@@ -1310,11 +1571,8 @@ export type Samrajya = {
       ],
       "accounts": [
         {
-          "name": "authority",
-          "signer": true,
-          "relations": [
-            "game"
-          ]
+          "name": "signer",
+          "signer": true
         },
         {
           "name": "game",
@@ -1340,6 +1598,110 @@ export type Samrajya = {
         }
       ],
       "args": []
+    },
+    {
+      "name": "strike",
+      "docs": [
+        "Swings / shoots from (x, z) facing (fx, fz). Remaining accounts: the Players the client",
+        "believes are in reach (writable); the program re-checks reach, arc, walls and blocking,",
+        "wounds them, and batters the gate when the blow hits nobody."
+      ],
+      "discriminator": [
+        59,
+        206,
+        138,
+        206,
+        74,
+        112,
+        3,
+        8
+      ],
+      "accounts": [
+        {
+          "name": "signer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "game",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  97,
+                  109,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "game.game_id",
+                "account": "game"
+              }
+            ]
+          },
+          "relations": [
+            "player"
+          ]
+        },
+        {
+          "name": "player",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  97,
+                  121,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "game"
+              },
+              {
+                "kind": "account",
+                "path": "player.wallet",
+                "account": "player"
+              }
+            ]
+          }
+        },
+        {
+          "name": "sessionToken",
+          "optional": true
+        }
+      ],
+      "args": [
+        {
+          "name": "x",
+          "type": "i16"
+        },
+        {
+          "name": "z",
+          "type": "i16"
+        },
+        {
+          "name": "fx",
+          "type": "i8"
+        },
+        {
+          "name": "fz",
+          "type": "i8"
+        },
+        {
+          "name": "heavy",
+          "type": "bool"
+        }
+      ]
     },
     {
       "name": "switchKingdom",
@@ -1494,6 +1856,92 @@ export type Samrajya = {
       "args": []
     },
     {
+      "name": "upgrade",
+      "docs": [
+        "Spend kingdom treasury on the next level of an upgrade (0 = walls, 1 = armory)."
+      ],
+      "discriminator": [
+        239,
+        238,
+        57,
+        74,
+        205,
+        87,
+        165,
+        26
+      ],
+      "accounts": [
+        {
+          "name": "signer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "game",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  97,
+                  109,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "game.game_id",
+                "account": "game"
+              }
+            ]
+          },
+          "relations": [
+            "player"
+          ]
+        },
+        {
+          "name": "player",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  97,
+                  121,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "game"
+              },
+              {
+                "kind": "account",
+                "path": "player.wallet",
+                "account": "player"
+              }
+            ]
+          }
+        },
+        {
+          "name": "sessionToken",
+          "optional": true
+        }
+      ],
+      "args": [
+        {
+          "name": "kind",
+          "type": "u8"
+        }
+      ]
+    },
+    {
       "name": "withdraw",
       "docs": [
         "Pays out `pending_withdrawal` (set by `leave`) from the vault. Base layer, after the",
@@ -1615,6 +2063,19 @@ export type Samrajya = {
         206,
         218
       ]
+    },
+    {
+      "name": "registry",
+      "discriminator": [
+        47,
+        174,
+        110,
+        246,
+        184,
+        182,
+        252,
+        218
+      ]
     }
   ],
   "errors": [
@@ -1635,8 +2096,8 @@ export type Samrajya = {
     },
     {
       "code": 6003,
-      "name": "stakeTooSmall",
-      "msg": "Stake is below the minimum"
+      "name": "wrongTicket",
+      "msg": "Entry must equal the ticket price"
     },
     {
       "code": 6004,
@@ -1720,8 +2181,58 @@ export type Samrajya = {
     },
     {
       "code": 6020,
+      "name": "maxLevel",
+      "msg": "Upgrade already at its highest level"
+    },
+    {
+      "code": 6021,
+      "name": "upgradeCooldown",
+      "msg": "Your kingdom already bought an upgrade this epoch"
+    },
+    {
+      "code": 6022,
+      "name": "cannotAfford",
+      "msg": "The treasury cannot pay for that"
+    },
+    {
+      "code": 6023,
+      "name": "lobbyNotReady",
+      "msg": "The lobby is still open, or fewer than two kingdoms have members"
+    },
+    {
+      "code": 6024,
+      "name": "staleGameId",
+      "msg": "The next war must take the next game id"
+    },
+    {
+      "code": 6025,
+      "name": "previousWarNotOver",
+      "msg": "The current war has not ended (or its result is not committed to Solana yet)"
+    },
+    {
+      "code": 6026,
       "name": "mathOverflow",
       "msg": "Math overflow"
+    },
+    {
+      "code": 6027,
+      "name": "fallen",
+      "msg": "Your warrior has fallen and waits for the bell"
+    },
+    {
+      "code": 6028,
+      "name": "invalidUnit",
+      "msg": "That move is not allowed"
+    },
+    {
+      "code": 6029,
+      "name": "notReady",
+      "msg": "Your weapon is not ready yet"
+    },
+    {
+      "code": 6030,
+      "name": "incompleteMuster",
+      "msg": "Every member's warrior must be mustered for the bell"
     }
   ],
   "types": [
@@ -1740,6 +2251,9 @@ export type Samrajya = {
           },
           {
             "name": "defender",
+            "docs": [
+              "`NEUTRAL` when the plains were attacked before anyone held them."
+            ],
             "type": "u8"
           },
           {
@@ -1768,12 +2282,19 @@ export type Samrajya = {
           {
             "name": "spoils",
             "docs": [
-              "Treasury moved to the winner (loot or failed-attack losses)."
+              "Treasury moved to the winner (loot or failed-attack losses), after the plains tax."
             ],
             "type": "u64"
           },
           {
             "name": "eliminated",
+            "type": "bool"
+          },
+          {
+            "name": "byFight",
+            "docs": [
+              "Decided by the hand fight (a walled realm): no roll; captured if the fort was cleared."
+            ],
             "type": "bool"
           }
         ]
@@ -1797,7 +2318,7 @@ export type Samrajya = {
           {
             "name": "totalShares",
             "docs": [
-              "Player value = shares × treasury / total_shares."
+              "Player value = shares × treasury / total_shares. Each member holds `SHARES_PER_MEMBER`."
             ],
             "type": "u128"
           },
@@ -1836,9 +2357,28 @@ export type Samrajya = {
             "type": {
               "array": [
                 "u64",
-                6
+                7
               ]
             }
+          },
+          {
+            "name": "upgrades",
+            "docs": [
+              "Level of each upgrade (`UPGRADE_WALLS`, `UPGRADE_ARMORY`)."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                2
+              ]
+            }
+          },
+          {
+            "name": "upgradedEpoch",
+            "docs": [
+              "Epoch of the last upgrade purchase (one per kingdom per epoch)."
+            ],
+            "type": "u32"
           }
         ]
       }
@@ -1878,6 +2418,9 @@ export type Samrajya = {
           },
           {
             "name": "epochEndsAt",
+            "docs": [
+              "End of the current epoch, or of the lobby while `phase == Lobby`."
+            ],
             "type": "i64"
           },
           {
@@ -1904,14 +2447,29 @@ export type Samrajya = {
             "type": "u64"
           },
           {
+            "name": "plainsDefense",
+            "docs": [
+              "Current garrison of the neutral plains (decays every epoch)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "plainsPot",
+            "docs": [
+              "Lamports waiting for the plains holder: the plains tax, upgrade spending and attacks",
+              "lost against the neutral garrison. Paid to the holder at the end of every epoch."
+            ],
+            "type": "u64"
+          },
+          {
             "name": "territoryOwner",
             "docs": [
-              "Faction index owning each territory."
+              "Faction index owning each territory (`NEUTRAL` for an unheld plains)."
             ],
             "type": {
               "array": [
                 "u8",
-                6
+                7
               ]
             }
           },
@@ -1954,6 +2512,35 @@ export type Samrajya = {
               "Total number of battles ever logged; next slot = battle_count % BATTLE_LOG_LEN."
             ],
             "type": "u32"
+          },
+          {
+            "name": "gates",
+            "docs": [
+              "Gate hit points per homeland (repaired at every bell)."
+            ],
+            "type": {
+              "array": [
+                "u16",
+                6
+              ]
+            }
+          },
+          {
+            "name": "fight",
+            "docs": [
+              "The hand fight's verdict per territory for the bell being resolved (`fight_set`):",
+              "the owner = held, another faction = it cleared the fort."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                7
+              ]
+            }
+          },
+          {
+            "name": "fightSet",
+            "type": "bool"
           }
         ]
       }
@@ -1964,7 +2551,10 @@ export type Samrajya = {
         "kind": "struct",
         "fields": [
           {
-            "name": "minStake",
+            "name": "ticket",
+            "docs": [
+              "Everyone enters with exactly this many lamports, and every member owns an equal share."
+            ],
             "type": "u64"
           },
           {
@@ -1999,9 +2589,51 @@ export type Samrajya = {
             "type": {
               "array": [
                 "u8",
-                6
+                7
               ]
             }
+          },
+          {
+            "name": "plainsDefense",
+            "docs": [
+              "Garrison of the neutral plains; decays with the storm like `base_defense`."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "plainsTaxBps",
+            "docs": [
+              "Cut of every battle's spoils that goes to the plains pot."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "upgradeCostBps",
+            "docs": [
+              "Upgrade level `n` (1-based) costs `n × upgrade_cost_bps` of the treasury."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "upgradeBonusBps",
+            "docs": [
+              "Each upgrade level adds this much to attack (armory) or defense (walls)."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "conquestBonusBps",
+            "docs": [
+              "Attack and defense bonus per territory held beyond the first."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "lobbySecs",
+            "docs": [
+              "After this long in the lobby anyone may start the war."
+            ],
+            "type": "i64"
           }
         ]
       }
@@ -2088,6 +2720,33 @@ export type Samrajya = {
           {
             "name": "claimed",
             "type": "bool"
+          },
+          {
+            "name": "unit",
+            "type": {
+              "defined": {
+                "name": "unit"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "registry",
+      "docs": [
+        "Points the app at the newest war. Lives on base and is never delegated."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "latestGame",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
           }
         ]
       }
@@ -2119,6 +2778,96 @@ export type Samrajya = {
           }
         ]
       }
+    },
+    {
+      "name": "unit",
+      "docs": [
+        "A member's warrior on the battlefield (docs/ARCHITECTURE.md §10, `field.rs`). Positions are in",
+        "the realm's coordinates ×100 (keep at the origin, the gate mid-edge at +z)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "at",
+            "docs": [
+              "Territory the warrior stands in (`NO_REALM` when it has none)."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "x",
+            "type": "i16"
+          },
+          {
+            "name": "z",
+            "type": "i16"
+          },
+          {
+            "name": "fx",
+            "docs": [
+              "Facing as a unit vector ×100."
+            ],
+            "type": "i8"
+          },
+          {
+            "name": "fz",
+            "type": "i8"
+          },
+          {
+            "name": "action",
+            "type": "u8"
+          },
+          {
+            "name": "gear",
+            "type": "u8"
+          },
+          {
+            "name": "role",
+            "type": "u8"
+          },
+          {
+            "name": "hp",
+            "type": "u8"
+          },
+          {
+            "name": "strikes",
+            "docs": [
+              "Counts strikes (wrapping) so every client can animate each blow."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "deadUntil",
+            "docs": [
+              "Fallen: back on its feet at home at this time. 0 = alive."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "movedAt",
+            "type": "i64"
+          },
+          {
+            "name": "strikeSec",
+            "docs": [
+              "Strike rate limit: strikes made during `strike_sec`."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "strikeCount",
+            "type": "u8"
+          },
+          {
+            "name": "dodgeAt",
+            "docs": [
+              "Last roll (`ACTION_DODGE`): untouchable for about a second, once per `DODGE_COOLDOWN_SECS`."
+            ],
+            "type": "i64"
+          }
+        ]
+      }
     }
   ],
   "constants": [
@@ -2131,6 +2880,11 @@ export type Samrajya = {
       "name": "playerSeed",
       "type": "bytes",
       "value": "[112, 108, 97, 121, 101, 114]"
+    },
+    {
+      "name": "registrySeed",
+      "type": "bytes",
+      "value": "[114, 101, 103, 105, 115, 116, 114, 121]"
     },
     {
       "name": "vaultSeed",

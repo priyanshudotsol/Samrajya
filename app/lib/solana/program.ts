@@ -3,7 +3,7 @@ import { Keypair, PublicKey } from '@solana/web3.js';
 
 import type { Samrajya } from './idl/samrajya';
 import idl from './idl/samrajya.json';
-import { baseConnection, erConnection, GAME_ID, PROGRAM_ID } from './connections';
+import { activeGameId, baseConnection, erConnection, PROGRAM_ID } from './connections';
 
 /** Delegation program that owns accounts while they live on the ER. */
 export const DELEGATION_PROGRAM_ID = new PublicKey('DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh');
@@ -40,7 +40,19 @@ export function programs() {
   return cached;
 }
 
-export function gamePda(gameId = GAME_ID) {
+export function registryPda() {
+  return PublicKey.findProgramAddressSync([Buffer.from('registry')], programId)[0];
+}
+
+/** Id of the newest war from the on-chain registry, or null if no war was ever opened. */
+export async function latestGameId(): Promise<number | null> {
+  const info = await baseConnection().getAccountInfo(registryPda(), 'confirmed');
+  if (!info) return null;
+  const r = programs().base.coder.accounts.decode('registry', info.data) as { latestGame: BN };
+  return Number(r.latestGame.toString());
+}
+
+export function gamePda(gameId = activeGameId()) {
   return PublicKey.findProgramAddressSync(
     [Buffer.from('game'), new BN(gameId).toArrayLike(Buffer, 'le', 8)],
     programId,
