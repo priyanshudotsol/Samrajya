@@ -124,8 +124,8 @@ pub fn allocate(game: &mut Game, p: &mut Player, target: u8, amount: u64) -> Res
     p.alloc_target = target;
     p.alloc_amount = amount;
     p.alloc_epoch = game.epoch;
-    // The squad assembles at the target's gate (§10.8); the open plains have no realm to stand in.
-    if t < N && p.unit.hp > 0 {
+    // The squad assembles at the target's gate (§10.8), or at the edge of Kurukshetra (§10.11).
+    if t < T && p.unit.hp > 0 {
         crate::field::place(p, game, target, 0);
     }
     Ok(())
@@ -457,7 +457,7 @@ pub fn resolve_epoch(game: &mut Game, randomness: &[u8; 32], now: i64) {
     game.fight_set = false;
     for t in 0..T {
         let rnd = sub_roll(randomness, t);
-        let verdict = fight.filter(|_| t < N).map(|v| v[t]);
+        let verdict = fight.map(|v| v[t]);
         if let Some(entry) = resolve_battle(game, &eff, t, rnd, verdict) {
             for f in 0..N {
                 if entry.attackers_mask & (1 << f) != 0 {
@@ -502,7 +502,7 @@ pub fn advance_epoch(game: &mut Game, now: i64) {
 /// elimination, conquest), its attacks are spent, and the war ends if `faction` now holds all.
 pub fn seize(game: &mut Game, t: usize, faction: u8) -> Result<BattleEntry> {
     require!(game.phase == Phase::Active && !game.pending_vrf, SamrajyaError::WrongPhase);
-    require!(t < N && game.territory_owner[t] != faction, SamrajyaError::InvalidTerritory);
+    require!(t < T && game.territory_owner[t] != faction, SamrajyaError::InvalidTerritory);
     require!(game.factions[faction as usize].attack_alloc[t] > 0, SamrajyaError::NotAdjacent);
     let eff = effective_allocs(game);
     let entry = resolve_battle(game, &eff, t, 0, Some(faction)).ok_or(SamrajyaError::InvalidTerritory)?;

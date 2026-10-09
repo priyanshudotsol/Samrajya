@@ -22,8 +22,6 @@ use anchor_lang::system_program::{transfer, Transfer};
 use ephemeral_rollups_sdk::anchor::{commit, delegate, ephemeral, vrf, vrf_callback};
 use ephemeral_rollups_sdk::cpi::DelegateConfig;
 use ephemeral_rollups_sdk::ephem::MagicIntentBundleBuilder;
-use ephemeral_rollups_sdk::vrf::instructions::{create_request_scoped_randomness_ix, RequestRandomnessParams};
-use ephemeral_rollups_sdk::vrf::types::SerializableAccountMeta;
 use session_keys::{session_auth_or, Session, SessionError, SessionTokenV2};
 
 pub use constants::*;
@@ -327,10 +325,12 @@ pub mod samrajya {
     }
 
     /// Permissionless game clock (the bell). Remaining accounts: every enlisted member's Player
-    /// (checked complete), so the program can read the hand fight at each fort: no living defender
-    /// inside and an attacker at the gate takes it, otherwise it holds (§10.8). Only an attack on
-    /// the open plains still needs the VRF; then the battles resolve in `battle_callback`.
+    /// (checked complete), so the program can read the hand fight in every realm: no living member
+    /// of the holder there and committed attackers at the gate / inside (in the stone circle on
+    /// Kurukshetra) take it, otherwise it holds (§10.8, §10.11). Every battle is decided by the
+    /// fight, so the bell resolves at once; the VRF accounts stay for compatibility, unused.
     pub fn resolve_epoch(ctx: Context<ResolveEpoch>, client_seed: u8) -> Result<()> {
+        let _ = client_seed;
         let now = Clock::get()?.unix_timestamp;
         let game = &mut ctx.accounts.game;
         check_can_resolve(game, now)?;
@@ -349,25 +349,7 @@ pub mod samrajya {
         }
         field::check_complete(game, &players, &keys)?;
         field::decide_forts(game, &players);
-        if !math::contested(game, PLAINS) {
-            // every battle is a fort: the fight has decided, no dice needed
-            math::resolve_epoch(game, &[0u8; 32], now);
-            return Ok(());
-        }
-        game.pending_vrf = true;
-        game.vrf_requested_at = now;
-        let mut caller_seed = [client_seed; 32];
-        caller_seed[..4].copy_from_slice(&game.epoch.to_le_bytes());
-        let ix = create_request_scoped_randomness_ix(RequestRandomnessParams {
-            payer: ctx.accounts.payer.key(),
-            oracle_queue: ctx.accounts.oracle_queue.key(),
-            callback_program_id: ID,
-            callback_discriminator: instruction::BattleCallback::DISCRIMINATOR.to_vec(),
-            caller_seed,
-            accounts_metas: Some(vec![SerializableAccountMeta { pubkey: game.key(), is_signer: false, is_writable: true }]),
-            ..Default::default()
-        });
-        ctx.accounts.invoke_signed_vrf(&ctx.accounts.payer.to_account_info(), &ix)?;
+        math::resolve_epoch(game, &[0u8; 32], now);
         Ok(())
     }
 

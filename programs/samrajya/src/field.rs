@@ -92,6 +92,22 @@ pub fn at_gate_or_inside(x: i32, z: i32) -> bool {
     in_gate(x, z) || is_inside(x, z)
 }
 
+/// Kurukshetra's stone circle (radius 1.5): where an attacker must stand to take the plains.
+const PLAINS_CIRCLE: i32 = 150;
+pub fn in_circle(x: i32, z: i32) -> bool {
+    dist(0, 0, x, z) <= PLAINS_CIRCLE
+}
+
+/// Where an attacker must stand to claim realm `t`: the stone circle on the plains, else the gate
+/// or inside the walls.
+fn claims(t: usize, x: i32, z: i32) -> bool {
+    if t == PLAINS {
+        in_circle(x, z)
+    } else {
+        at_gate_or_inside(x, z)
+    }
+}
+
 fn crosses_wall(ax: i32, az: i32, bx: i32, bz: i32) -> bool {
     let (a, b) = (hex_depth(ax, az), hex_depth(bx, bz));
     let half = WALL_THICK / 2;
@@ -175,7 +191,7 @@ pub fn fighting(p: &Player, game: &Game) -> bool {
 /// Where the warrior may teleport: a realm its kingdom holds (adjacent, or anywhere with Vidya
 /// Reach), or the realm its kingdom ordered it to attack this epoch.
 fn may_teleport(p: &Player, game: &Game, to: u8) -> bool {
-    if to as usize >= N {
+    if to as usize >= T {
         return false;
     }
     if p.alloc_epoch == game.epoch && p.alloc_target == to {
@@ -287,7 +303,9 @@ pub fn strike(attacker: &mut Player, targets: &mut [Player], game: &mut Game, fx
     let (ax, az, fx, fz) = (a.x as i32, a.z as i32, fx as i32, fz as i32);
     let flen = isqrt((fx * fx + fz * fz) as i64).max(1);
     let defending_home = attacker.faction == owner;
-    let archer_bonus = w.ranged && defending_home && (is_inside(ax, az) || hex_depth(ax, az).abs() <= WALL_THICK);
+    // Kurukshetra is an open field: no walls to block, shelter behind or shoot from
+    let open = t == PLAINS;
+    let archer_bonus = !open && w.ranged && defending_home && (is_inside(ax, az) || hex_depth(ax, az).abs() <= WALL_THICK);
 
     // the fort lock (§10.10): an enemy can only be inside the walls once the garrison is dead, so
     // an enemy inside who still finds a living defender to hit got there by cheating
@@ -320,7 +338,7 @@ pub fn strike(attacker: &mut Player, targets: &mut [Player], game: &mut Game, fx
             if d > 12 && (dx * fx + dz * fz) * 1000 < w.cos_arc * d * flen {
                 continue;
             }
-            if crosses_wall(ax, az, p.unit.x as i32, p.unit.z as i32) {
+            if !open && crosses_wall(ax, az, p.unit.x as i32, p.unit.z as i32) {
                 continue;
             }
             cands.push((i, d));
@@ -346,7 +364,7 @@ pub fn strike(attacker: &mut Player, targets: &mut [Player], game: &mut Game, fx
                 dmg = dmg * WEAPONS[tu.gear.min(GEARS - 1) as usize].block_taken / 100;
             }
         }
-        if targets[i].faction == owner && is_inside(tu.x as i32, tu.z as i32) {
+        if !open && targets[i].faction == owner && is_inside(tu.x as i32, tu.z as i32) {
             dmg = dmg * 85 / 100;
         }
         let damage = ((dmg + 50) / 100).max(1).min(255) as u8;
@@ -366,12 +384,12 @@ pub fn strike(attacker: &mut Player, targets: &mut [Player], game: &mut Game, fx
     Ok((hits, gate))
 }
 
-/// The fort verdict at the bell for every contested homeland, from every member's warrior: no
-/// member of the owner left alive anywhere in the realm (§10.10) and a committed attacker at the
-/// gate or inside → that kingdom takes it (the most warriors there); otherwise the owner holds.
-/// Stored in `game.fight`.
+/// The verdict at the bell for every contested realm, from every member's warrior: no member of
+/// the holder left alive anywhere in the realm (§10.10) and committed attackers at the gate or
+/// inside (in the stone circle on Kurukshetra, §10.11) → the kingdom with the most there takes it;
+/// otherwise the holder keeps it. Stored in `game.fight`.
 pub fn decide_forts(game: &mut Game, players: &[Player]) {
-    for t in 0..N {
+    for t in 0..T {
         let owner = game.territory_owner[t];
         let mut defenders = 0u32;
         let mut attackers = [0u32; N];
@@ -382,7 +400,7 @@ pub fn decide_forts(game: &mut Game, players: &[Player]) {
             let (x, z) = (p.unit.x as i32, p.unit.z as i32);
             if p.faction == owner {
                 defenders += 1;
-            } else if game.factions[p.faction as usize].attack_alloc[t] > 0 && at_gate_or_inside(x, z) {
+            } else if game.factions[p.faction as usize].attack_alloc[t] > 0 && claims(t, x, z) {
                 attackers[p.faction as usize] += 1;
             }
         }
@@ -398,17 +416,18 @@ pub fn decide_forts(game: &mut Game, players: &[Player]) {
         }
         game.fight[t] = verdict;
     }
-    game.fight[PLAINS] = game.territory_owner[PLAINS];
     game.fight_set = true;
 }
 
 /// `seize` (§10.11): `seizer` stands inside realm `t`'s walls with an order on it, and among
 /// `players` (which must hold every member of the owner, checked) none stands alive in `t`.
 pub fn check_abandoned(game: &Game, t: usize, seizer: &Player, players: &[Player], keys: &[Pubkey]) -> Result<()> {
-    require!(t < N, SamrajyaError::InvalidTerritory);
+    require!(t < T, SamrajyaError::InvalidTerritory);
     let owner = game.territory_owner[t];
     require!(fighting(seizer, game) && seizer.unit.at as usize == t, SamrajyaError::InvalidUnit);
-    require!(is_inside(seizer.unit.x as i32, seizer.unit.z as i32), SamrajyaError::InvalidUnit);
+    // inside the walls of a fort, or in the stone circle of Kurukshetra
+    let (x, z) = (seizer.unit.x as i32, seizer.unit.z as i32);
+    require!(if t == PLAINS { in_circle(x, z) } else { is_inside(x, z) }, SamrajyaError::InvalidUnit);
     require!(seizer.alloc_epoch == game.epoch && seizer.alloc_target as usize == t, SamrajyaError::InvalidUnit);
     for i in 0..keys.len() {
         for j in i + 1..keys.len() {
