@@ -149,6 +149,12 @@ Update this file at the end of every session. Design lives in `docs/ARCHITECTURE
 - [x] **War 8 open on devnet** (`BpLpgAM3Xidc9Axjqaam14QCLrYcm75UDZznjGEfhn9B`), keeper running
 - [ ] Two browsers with Phantom: a full siege by hand
 
+## Phase 11 — Empty forts fall at once, war music only in a fight (2026-10-09, ARCHITECTURE §10.11)
+- [x] Program `seize(x, z)` + `field::check_abandoned` + `math::seize` (22 Rust tests, new: refusals for a living defender / hidden garrison / outside the walls, instant fall, memberless kingdom); TS `seizeFort`, mock `seizeAbandoned` (42 TS tests, new: walk into empty Kalinga → falls without a bell; Hastinapur with a living member does not)
+- [x] App: `actions.seize`, the HUD's `useSeize` fires it when you stand inside an empty enemy fort you were ordered to attack; `MusicDirector` plays the battle loop only while blows land in the realm on screen
+- [x] Deployed to devnet (no layout change). `test:er:devnet` 7/7 (war 9): Magadh and Kalinga seized the moment Hastinapur walked in after shooting their garrisons down, Avanti / Takshashila / Vijayanagar (no members) seized on entry, all before the bell; winners claimed the vault to rent
+- [x] **War 10 open on devnet** (`32MUFgrpm426n8tHBtWPvBfPii4v5LAKQjBwX2bG5Uns`, lobby on Solana); keeper running
+
 ## Phase 4 — Ship
 - [x] Devnet game 1 created: `6vHY4pcSVGQwbqFiuJMioLMgd6icLNQNRYRGHTt7BHzS`, 30 s epochs, delegated, **lobby open**
 - [ ] Start the war (`GAME_ID=1 yarn create-game --start`) and keep `GAME_ID=1 yarn keeper` running

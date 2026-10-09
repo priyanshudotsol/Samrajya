@@ -509,6 +509,16 @@ plan in chat; nothing should play itself. So the fight before the bell is real:
 - Bots (mock) fight whoever comes within 2.2 (3.8 with a bow), batter gates when they stand at
   one, and swing 1.5–2.1× slower than the cooldown so a human can win a fair duel.
 
+### 10.11 Empty forts fall at once; war music only in a fight (user, 2026-10-09)
+- **`seize(x, z)`:** an attacker with an order on realm `t` who walks inside its walls while no member
+  of the owner stands alive there takes it immediately (no bell). Remaining accounts: every Player with
+  shares (the owner's checked complete, none alive in `t`). `math::seize` resolves that realm like a bell
+  battle (loot, losses, elimination, conquest bonus), zeroes its attack allocations, and ends the war if
+  one kingdom now holds everything; the epoch does not move. A kingdom with no members needs no muster.
+  The HUD sends it the moment your warrior is inside such a fort; the mock does it on its tick.
+- **Music:** the battle loop plays only while blows are struck in the realm on screen (swings, hits,
+  arrows, kills) and returns to the peace loop 6 s after the last one; the bell's verdict keeps its sting.
+
 ### 10.10 The fort lock and real fights (user, 2026-10-09)
 The user: "no fight is happening between the sprites… the outside attacker can't enter the house of
 the kingdom while a single person is alive; same kingdom members do whatever they want… make it
