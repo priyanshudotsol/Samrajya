@@ -1,6 +1,6 @@
 /**
- * Tiny sound API (docs/KINGDOM_UI.md §9). Muted by default; unmuting (a user click) creates the
- * AudioContext, which satisfies autoplay rules. Everything is synthesised with WebAudio, so no
+ * Tiny sound API (docs/KINGDOM_UI.md §9). Sound is on by default (the mute switch is remembered);
+ * the AudioContext is unlocked on the first click or key press, which satisfies autoplay rules. Everything is synthesised with WebAudio, so no
  * audio files are shipped. Safe to import and call on the server (all no-ops).
  */
 
@@ -8,7 +8,7 @@ export type Sfx = 'horn' | 'drum' | 'clash' | 'catapult' | 'tick' | 'fanfare' | 
 
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
-let muted = true;
+let muted = false;
 const listeners = new Set<() => void>();
 const MUTE_KEY = 'samrajya:muted';
 
@@ -45,14 +45,22 @@ export function setMuted(m: boolean) {
   listeners.forEach((l) => l());
 }
 
-/** Restores the saved preference but stays muted until the next user gesture unlocks audio. */
-export function restoreMutePreference(): boolean {
-  if (typeof window === 'undefined') return true;
+// Restore the saved mute switch (on by default), then unlock audio on the first user gesture.
+if (typeof window !== 'undefined') {
   try {
-    return window.localStorage.getItem(MUTE_KEY) !== '0';
+    muted = window.localStorage.getItem(MUTE_KEY) === '1';
   } catch {
-    return true;
+    // ignore
   }
+  const unlock = () => {
+    window.removeEventListener('pointerdown', unlock);
+    window.removeEventListener('keydown', unlock);
+    if (muted) return;
+    ensureCtx();
+    preloadSfx();
+  };
+  window.addEventListener('pointerdown', unlock);
+  window.addEventListener('keydown', unlock);
 }
 
 export function subscribeAudio(fn: () => void): () => void {

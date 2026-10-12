@@ -368,7 +368,7 @@ These go in `components/world/*` and build on chain-wars' `globe.tsx`.
 - Use `howler` with sprites, in `lib/audio.ts`.
 - **Music:** a calm realm loop crossfades to a battle loop on MUSTER.
 - **SFX events:** commit (horn), incoming increased (war drum), clash (swords), catapult (whoosh + impact), rune spin (tick), HELD (fanfare), FALLEN (bell + crumble).
-- Sound is muted by default and unlocked on the first click, to satisfy browser autoplay rules.
+- Sound is on by default (the mute switch is remembered) and unlocks on the first click or key press, to satisfy browser autoplay rules.
 
 ---
 

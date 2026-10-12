@@ -100,7 +100,7 @@ const MUSIC_CREDIT =
   'Music: "Five Armies", "Heroic Age", "The Curtain Rises", "Long Road Ahead B" by Kevin MacLeod (incompetech.com), licensed under Creative Commons: By Attribution 4.0 (http://creativecommons.org/licenses/by/4.0/). Trimmed/re-encoded.';
 
 function Toggles() {
-  const muted = useSyncExternalStore(subscribeAudio, isMuted, () => true);
+  const muted = useSyncExternalStore(subscribeAudio, isMuted, () => false);
   const lowPower = useRealmUi((s) => s.lowPower);
   const setLowPower = useRealmUi((s) => s.setLowPower);
   const hudHidden = useRealmUi((s) => s.hudHidden);
